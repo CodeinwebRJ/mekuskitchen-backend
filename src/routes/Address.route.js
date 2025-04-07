@@ -6,8 +6,8 @@ const {
 } = require("../controllers/Address.controller");
 const AddressRoute = express.Router();
 
-AddressRoute.get("/:userId", getUserAddress);
 AddressRoute.post("/create", createAddress);
-AddressRoute.post("/update", updateAddress);
+AddressRoute.get("/:userId", getUserAddress);
+AddressRoute.put("/update", updateAddress);
 
 module.exports = AddressRoute;

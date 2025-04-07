@@ -47,8 +47,11 @@ const userAddressSchema = new Schema(
     isDifferent: {
       type: Boolean,
     },
-    billing: addressSchema, // Billing address sub-document
-    shipping: addressSchema, // Shipping address sub-document
+    isActive: {
+      type: Boolean,
+    },
+    billing: addressSchema,
+    shipping: addressSchema,
   },
   {
     timestamps: true,

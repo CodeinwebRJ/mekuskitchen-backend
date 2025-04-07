@@ -1,0 +1,54 @@
+const mongoose = require("mongoose");
+
+const OrderSchema = new mongoose.Schema({
+  userId: {
+    type: String,
+    required: true,
+  },
+  cartId: {
+    type: String,
+    required: true,
+  },
+  addressId: {
+    type: String,
+    required: true,
+  },
+  paymentMethod: {
+    type: String,
+  },
+  paymentStatus: {
+    type: String,
+    enum: ["Pending", "Paid", "Failed"],
+  },
+  orderStatus: {
+    type: String,
+    enum: [
+      "Pending",
+      "Confirmed",
+      "Preparing",
+      "Out for delivery",
+      "Delivered",
+      "Cancelled",
+    ],
+  },
+  deliveryTime: {
+    type: Date,
+  },
+  totalAmount: {
+    type: Number,
+  },
+  discount: {
+    type: Number,
+  },
+  deliveryFee: {
+    type: Number,
+  },
+  taxAmount: {
+    type: Number,
+  },
+  notes: {
+    type: String,
+  },
+});
+
+module.exports = mongoose.model("Order", OrderSchema);

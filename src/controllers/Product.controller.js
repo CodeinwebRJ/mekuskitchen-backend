@@ -6,7 +6,6 @@ const fs = require("fs");
 
 const getAllProducts = async (req, res) => {
   try {
-    console.log(req.body);
     const { page, limit, search, sortBy, category } = req.body;
 
     if (!page || !limit) {
@@ -16,7 +15,6 @@ const getAllProducts = async (req, res) => {
     }
     const skip = (page - 1) * limit;
 
-    // Build query object
     let query = {};
     if (search) {
       query.product_name = { $regex: search, $options: "i" };
@@ -25,7 +23,6 @@ const getAllProducts = async (req, res) => {
       query.category = { $regex: category, $options: "i" };
     }
 
-    // Base aggregation pipeline
     let pipeline = [
       { $match: query },
       {
@@ -201,19 +198,12 @@ const CreateProduct = async (req, res) => {
 
 const getProductById = async (req, res) => {
   try {
-    const { id } = req.query;
+    const { id } = req.params;
 
     if (!id) {
       return res.status(400).json(new ApiError(400, "Product ID is required"));
     }
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res
-        .status(400)
-        .json(new ApiError(400, "Invalid product ID format"));
-    }
-
-    // Find product by ID
+ 
     const product = await ProductModel.findById(id);
 
     if (!product) {

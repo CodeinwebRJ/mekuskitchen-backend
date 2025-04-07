@@ -1,6 +1,7 @@
 const ApiError = require("../utils/ApiError");
 const ApiResponse = require("../utils/ApiResponse");
 const ReviewModel = require("../models/Review.model");
+const ProductModel = require("../models/Product.model");
 
 const getAllReviews = async (req, res) => {
   try {
@@ -93,8 +94,49 @@ const deleteReviews = async (req, res) => {
   }
 };
 
+const getTopRatedProducts = async (req, res) => {
+  try {
+    const topProducts = await ReviewModel.aggregate([
+      {
+        $group: {
+          _id: "$product_id",
+          avgRating: { $avg: "$rating" },
+          totalReviews: { $sum: 1 },
+        },
+      },
+      {
+        $sort: { avgRating: -1, totalReviews: -1 },
+      },
+      {
+        $limit: 5,
+      },
+    ]);
+
+    const productIds = topProducts.map((p) => p._id);
+    const products = await ProductModel.find({ _id: { $in: productIds } });
+
+    const responseData = topProducts.map((product) => {
+      const productDetails = products.find(
+        (p) => p._id.toString() === product._id.toString()
+      );
+      return {
+        ...productDetails._doc,
+        avgRating: product.avgRating,
+        totalReviews: product.totalReviews,
+      };
+    });
+
+    res
+      .status(200)
+      .json(new ApiResponse(200, responseData, "Get Top food successfully"));
+  } catch (error) {
+    res.status(500).json(new ApiError(500, error.message));
+  }
+};
+
 module.exports = {
   getAllReviews,
   addReviews,
   deleteReviews,
-}; 
+  getTopRatedProducts,
+};
