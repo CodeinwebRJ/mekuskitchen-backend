@@ -167,8 +167,45 @@ const updateAddress = async (req, res) => {
   }
 };
 
+const deleteAddress = async (req, res) => {
+  try {
+    const { userId, addressId } = req.body;
+
+    if (!userId || !addressId) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "User ID and Address ID are required"));
+    }
+
+    const address = await AddressModel.findOneAndDelete({
+      _id: addressId,
+      user: userId,
+    });
+
+    if (!address) {
+      return res
+        .status(404)
+        .json(new ApiError(404, "Address not found or already deleted"));
+    }
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, null, "Address deleted successfully"));
+  } catch (error) {
+    return res
+      .status(500)
+      .json(
+        new ApiError(
+          error.statusCode || 500,
+          error.message || "Error deleting address"
+        )
+      );
+  }
+};
+
 module.exports = {
   getUserAddress,
   createAddress,
   updateAddress,
+  deleteAddress,
 };
