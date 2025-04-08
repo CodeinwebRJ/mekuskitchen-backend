@@ -7,7 +7,7 @@ const getUserCart = async (req, res) => {
     const { user_id } = req.params;
 
     if (!user_id) {
-      res.status(400).json(new ApiError(400, "User ID is required"));
+      return res.status(400).json(new ApiError(400, "User ID is required"));
     }
 
     const cart = await CartModel.findOne({ user: user_id });
@@ -19,6 +19,7 @@ const getUserCart = async (req, res) => {
           {
             user: user_id,
             items: [],
+            tiffins: [],
             totalAmount: "0",
             createdAt: null,
             updatedAt: null,
@@ -32,7 +33,7 @@ const getUserCart = async (req, res) => {
       .status(200)
       .json(new ApiResponse(200, cart, "Cart retrieved successfully"));
   } catch (error) {
-    console.log(error);
+    console.error(error);
     return res
       .status(500)
       .json(new ApiError(500, "Internal Server Error", [error.message]));
@@ -41,48 +42,94 @@ const getUserCart = async (req, res) => {
 
 const addToCart = async (req, res) => {
   try {
-    const { product_id, user_id, totalAmount, quantity, price } = req.body;
+    const {
+      user_id,
+      isTiffinCart,
+      product_id,
+      quantity,
+      price,
+      tiffinMenuId,
+      customizedItems,
+      specialInstructions,
+      orderDate,
+      day,
+    } = req.body;
 
-    if (!product_id || !user_id || !quantity || !price) {
-      return res.status(400).json(new ApiError(400, "Missing fields required"));
+    if (!user_id) {
+      return res.status(400).json(new ApiError(400, "User ID is required"));
     }
 
     let cart = await CartModel.findOne({ user: user_id });
+
     if (!cart) {
-      cart = await CartModel.create({
+      cart = new CartModel({
         user: user_id,
         items: [],
+        tiffins: [],
         totalAmount: "0",
       });
     }
 
-    const itemIndex = cart.items.findIndex(
-      (item) => item.product === product_id
-    );
-    if (itemIndex > -1) {
-      cart.items[itemIndex].quantity += Number(quantity);
-    } else {
-      cart.items.push({ product: product_id, quantity, price });
+    // Handle Tiffin
+    if (isTiffinCart) {
+      if (!tiffinMenuId || !customizedItems || !orderDate || !day) {
+        return res.status(400).json(new ApiError(400, "Missing tiffin data"));
+      }
+
+      const tiffinTotal = customizedItems.reduce((sum, item) => {
+        return (
+          sum + parseFloat(item.price || 0) * parseFloat(item.quantity || 1)
+        );
+      }, 0);
+
+      cart.tiffins.push({
+        tiffinMenuId,
+        customizedItems,
+        specialInstructions: specialInstructions || "",
+        orderDate,
+        day,
+        quantity: quantity || 1,
+        totalAmount: (tiffinTotal * (quantity || 1)).toFixed(2),
+      });
+    }
+    // Handle Product
+    else {
+      if (!product_id || !quantity || !price) {
+        return res
+          .status(400)
+          .json(new ApiError(400, "Missing fields for product cart item"));
+      }
+
+      const itemIndex = cart.items.findIndex(
+        (item) => item.product === product_id
+      );
+
+      if (itemIndex > -1) {
+        cart.items[itemIndex].quantity += Number(quantity);
+      } else {
+        cart.items.push({ product: product_id, quantity, price });
+      }
     }
 
-    cart.totalAmount = cart.items
-      .reduce((sum, item) => sum + parseFloat(item.price) * item.quantity, 0)
-      .toString();
+    // Calculate total amount
+    const productTotal = cart.items.reduce(
+      (sum, item) => sum + parseFloat(item.price) * item.quantity,
+      0
+    );
+    const tiffinTotal = cart.tiffins.reduce(
+      (sum, t) => sum + parseFloat(t.totalAmount || 0),
+      0
+    );
+
+    cart.totalAmount = (productTotal + tiffinTotal).toFixed(2);
 
     await cart.save();
 
     return res
       .status(200)
-      .json(new ApiResponse(200, cart, "Item added to cart successfully"));
+      .json(new ApiResponse(200, cart, "Cart updated successfully"));
   } catch (error) {
-    if (error instanceof ApiError) {
-      return res.status(error.statusCode).json({
-        success: false,
-        message: error.message,
-        errors: error.errors || [],
-      });
-    }
-    console.log(error);
+    console.error(error);
     return res
       .status(500)
       .json(new ApiError(500, "Internal Server Error", [error.message]));
@@ -91,60 +138,111 @@ const addToCart = async (req, res) => {
 
 const updateCart = async (req, res) => {
   try {
-    const { user_id, product_id, quantity } = req.body;
+    const {
+      user_id,
+      product_id,
+      tiffinMenuId,
+      day,
+      quantity,
+      type, // 'product' or 'tiffin'
+    } = req.body;
 
-    if (!user_id || !product_id || !quantity) {
+    if (!user_id || quantity == null || !type) {
       return res
         .status(400)
         .json(
-          new ApiError(400, "User ID, Product ID, and quantity are required")
+          new ApiError(
+            400,
+            "user_id, quantity, and type ('product' or 'tiffin') are required"
+          )
         );
     }
 
-    if (quantity < 0) {
-      return res
-        .status(400)
-        .json(new ApiError(400, "Quantity must be a non-negative integer"));
-    }
-
     let cart = await CartModel.findOne({ user: user_id });
+
     if (!cart) {
       return res.status(404).json(new ApiError(404, "Cart not found"));
     }
 
-    const itemIndex = cart.items.findIndex(
-      (item) => item.product.toString() === product_id.toString()
+    if (type === "product") {
+      if (!product_id) {
+        return res
+          .status(400)
+          .json(new ApiError(400, "Product ID is required"));
+      }
+
+      const itemIndex = cart.items.findIndex(
+        (item) => item.product === product_id
+      );
+
+      if (itemIndex === -1) {
+        return res
+          .status(404)
+          .json(new ApiError(404, "Product not found in cart"));
+      }
+
+      if (quantity === 0) {
+        cart.items.splice(itemIndex, 1);
+      } else {
+        cart.items[itemIndex].quantity = quantity;
+      }
+    } else if (type === "tiffin") {
+      if (!tiffinMenuId || !day) {
+        return res
+          .status(400)
+          .json(new ApiError(400, "Tiffin menu ID and day are required"));
+      }
+
+      const tiffinIndex = cart.tiffins.findIndex(
+        (t) => t.tiffinMenuId === tiffinMenuId && t.day === day
+      );
+
+      if (tiffinIndex === -1) {
+        return res
+          .status(404)
+          .json(new ApiError(404, "Tiffin not found in cart"));
+      }
+
+      if (quantity === 0) {
+        cart.tiffins.splice(tiffinIndex, 1);
+      } else {
+        const tiffin = cart.tiffins[tiffinIndex];
+        tiffin.quantity = quantity;
+
+        const basePrice = tiffin.customizedItems.reduce((sum, item) => {
+          return (
+            sum + parseFloat(item.price || 0) * parseFloat(item.quantity || 1)
+          );
+        }, 0);
+
+        tiffin.totalAmount = (basePrice * quantity).toFixed(2);
+      }
+    } else {
+      return res
+        .status(400)
+        .json(new ApiError(400, "Invalid type. Must be 'product' or 'tiffin'"));
+    }
+
+    // Recalculate total cart amount
+    const productTotal = cart.items.reduce(
+      (sum, item) => sum + parseFloat(item.price) * item.quantity,
+      0
     );
 
-    if (itemIndex === -1) {
-      return res
-        .status(404)
-        .json(new ApiError(404, "Product not found in cart"));
-    }
+    const tiffinTotal = cart.tiffins.reduce(
+      (sum, t) => sum + parseFloat(t.totalAmount || 0),
+      0
+    );
 
-    if (quantity === 0) {
-      cart.items.splice(itemIndex, 1);
-      cart.totalAmount = cart.items
-        .reduce((sum, item) => sum + parseFloat(item.price) * item.quantity, 0)
-        .toString();
-      await cart.save();
-      return res
-        .status(200)
-        .json(
-          new ApiResponse(200, cart, "Product removed from cart successfully")
-        );
-    } else {
-      cart.items[itemIndex].quantity = quantity;
-      cart.totalAmount = cart.items
-        .reduce((sum, item) => sum + parseFloat(item.price) * item.quantity, 0)
-        .toString();
-      await cart.save();
-      return res
-        .status(200)
-        .json(new ApiResponse(200, cart, "Cart quantity updated successfully"));
-    }
+    cart.totalAmount = (productTotal + tiffinTotal).toFixed(2);
+
+    await cart.save();
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, cart, "Cart updated successfully"));
   } catch (error) {
-    console.error("Cart update error:", error);
+    console.error(error);
     return res
       .status(500)
       .json(new ApiError(500, "Internal Server Error", [error.message]));

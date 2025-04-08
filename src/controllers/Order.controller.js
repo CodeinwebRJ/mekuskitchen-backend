@@ -72,6 +72,7 @@ const getOrderById = async (req,   res) => {
   }
 };
 
+//get all for admin
 const getAllOrders = async (req, res) => {
   try {
     const orders = await OrderModel.find().sort({ createdAt: -1 });
