@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 
-const TiffinSchema = new mongoose.Schema(
+const TiffinMenuSchema = new mongoose.Schema(
   {
     day: {
       type: String,
@@ -52,4 +52,4 @@ const TiffinSchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model("Tiffin", TiffinSchema);
+module.exports = mongoose.model("TiffinMenu", TiffinMenuSchema);

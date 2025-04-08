@@ -6,7 +6,7 @@ const ReviewRoute = require("./routes/Review.route");
 const CartRoute = require("./routes/Cart.route");
 const AddressRoute = require("./routes/Address.route");
 const OrderRoute = require("./routes/Order.route");
-const TiffinRoute = require("./routes/Tiffin.route");
+const TiffinMenuRoute = require("./routes/TiffinMenu.route");
 require("dotenv").config();
 
 const app = express();
@@ -31,6 +31,6 @@ app.use("/api/v1/review", ReviewRoute);
 app.use("/api/v1/cart", CartRoute);
 app.use("/api/v1/address", AddressRoute)
 app.use("/api/v1/order" , OrderRoute)
-app.use("/api/v1/tiffin" , TiffinRoute)
+app.use("/api/v1/tiffin-menu" , TiffinMenuRoute)
 
 module.exports = app;

@@ -1,13 +1,13 @@
 const ApiError = require("../utils/ApiError");
 const ApiResponse = require("../utils/ApiResponse");
-const TiffinModel = require("../models/Tiffin.model");
+const TiffinMenuModel = require("../models/TiffinMenu.model");
 
 const getAllTiffinMenu = async (req, res) => {
   try {
     const { Active } = req.body;
     const filter = typeof Active === "boolean" ? { Active } : { Active: true };
 
-    const tiffins = await TiffinModel.find(filter).sort({ createdAt: -1 });
+    const tiffins = await TiffinMenuModel.find(filter).sort({ createdAt: -1 });
 
     return res
       .status(200)
@@ -35,7 +35,7 @@ const createTiffinMenu = async (req, res) => {
         .json(new ApiError(400, "Day and items are required"));
     }
 
-    const existingTiffin = await TiffinModel.findOne({ day });
+    const existingTiffin = await TiffinMenuModel.findOne({ day });
 
     if (existingTiffin) {
       return res
@@ -69,7 +69,7 @@ const editTiffinMenu = async (req, res) => {
     const { day, items, date, subTotal, BookingEndDate, totalAmount, Active } =
       req.body;
 
-    const existingTiffin = await TiffinModel.findById(id);
+    const existingTiffin = await TiffinMenuModel.findById(id);
     if (!existingTiffin) {
       return res.status(404).json(new ApiError(404, "Tiffin menu not found"));
     }
@@ -99,7 +99,7 @@ const deleteTiffinMenu = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const deletedTiffin = await TiffinModel.findByIdAndDelete(id);
+    const deletedTiffin = await TiffinMenuModel.findByIdAndDelete(id);
 
     if (!deletedTiffin) {
       return res.status(404).json(new ApiError(404, "Tiffin menu not found"));
