@@ -4,8 +4,19 @@ const TiffinMenuModel = require("../models/TiffinMenu.model");
 
 const getAllTiffinMenu = async (req, res) => {
   try {
-    const { Active } = req.body;
-    const filter = typeof Active === "boolean" ? { Active } : { Active: true };
+    const { Active, day } = req.body;
+
+    const filter = {};
+
+    // Add day filter if provided
+    if (typeof day === "string" && day.trim() !== "") {
+      filter.day = day;
+    }
+
+    // Add Active filter only if explicitly boolean
+    if (typeof Active === "boolean") {
+      filter.Active = Active;
+    }
 
     const tiffins = await TiffinMenuModel.find(filter).sort({ createdAt: -1 });
 
@@ -15,7 +26,9 @@ const getAllTiffinMenu = async (req, res) => {
         new ApiResponse(
           200,
           tiffins,
-          `Tiffin menus fetched successfully (Active: ${filter.Active})`
+          `Tiffin menus fetched successfully${
+            filter.day ? ` for ${filter.day}` : ""
+          }${filter.Active !== undefined ? ` (Active: ${filter.Active})` : ""}`
         )
       );
   } catch (error) {
@@ -26,8 +39,7 @@ const getAllTiffinMenu = async (req, res) => {
 
 const createTiffinMenu = async (req, res) => {
   try {
-    const { day, items, date, subTotal, totalAmount } =
-      req.body;
+    const { day, items, date, subTotal, totalAmount } = req.body;
 
     if (!day || !items || items.length === 0) {
       return res
@@ -43,7 +55,7 @@ const createTiffinMenu = async (req, res) => {
         .json(new ApiError(400, `Tiffin menu for ${day} already exists`));
     }
 
-    const newTiffin = await TiffinModel.create({
+    const newTiffin = await TiffinMenuModel.create({
       day,
       items,
       date,
@@ -107,9 +119,7 @@ const deleteTiffinMenu = async (req, res) => {
 
     return res
       .status(200)
-      .json(
-        new ApiResponse(200, deletedTiffin, "Tiffin menu deleted successfully")
-      );
+      .json(new ApiResponse(200, null, "Tiffin menu deleted successfully"));
   } catch (error) {
     console.log(error);
     return res.status(500).json(new ApiError(500, "Internal Server Error"));

@@ -10,6 +10,6 @@ const TiffinMenuRoute = express.Router();
 TiffinMenuRoute.get("/", getAllTiffinMenu);
 TiffinMenuRoute.post("/create", createTiffinMenu);
 TiffinMenuRoute.put("/update/:id", editTiffinMenu);
-TiffinMenuRoute.delete("/delete", deleteTiffinMenu);
+TiffinMenuRoute.delete("/delete/:id", deleteTiffinMenu);
 
 module.exports = TiffinMenuRoute;

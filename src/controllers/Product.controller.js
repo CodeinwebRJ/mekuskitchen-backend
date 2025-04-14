@@ -203,7 +203,7 @@ const getProductById = async (req, res) => {
     if (!id) {
       return res.status(400).json(new ApiError(400, "Product ID is required"));
     }
- 
+
     const product = await ProductModel.findById(id);
 
     if (!product) {

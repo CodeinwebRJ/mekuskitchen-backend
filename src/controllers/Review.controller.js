@@ -5,7 +5,7 @@ const ProductModel = require("../models/Product.model");
 
 const getAllReviews = async (req, res) => {
   try {
-    const { productId } = req.body;
+    const { productId } = req.params;
 
     if (!productId) {
       return res.status(400).json(new ApiError(400, "Product ID is required"));

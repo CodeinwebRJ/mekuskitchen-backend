@@ -4,20 +4,20 @@ const CartModel = require("../models/Cart.model");
 
 const getUserCart = async (req, res) => {
   try {
-    const { user_id } = req.params;
+    const { userId } = req.params;
 
-    if (!user_id) {
+    if (!userId) {
       return res.status(400).json(new ApiError(400, "User ID is required"));
     }
 
-    const cart = await CartModel.findOne({ user: user_id });
+    const cart = await CartModel.findOne({ user: userId });
 
     if (!cart) {
       return res.status(200).json(
         new ApiResponse(
           200,
           {
-            user: user_id,
+            user: userId,
             items: [],
             tiffins: [],
             totalAmount: "0",
@@ -54,7 +54,7 @@ const addToCart = async (req, res) => {
       orderDate,
       day,
     } = req.body;
-
+ 
     if (!user_id) {
       return res.status(400).json(new ApiError(400, "User ID is required"));
     }

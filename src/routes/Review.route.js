@@ -7,8 +7,8 @@ const {
 } = require("../controllers/Review.controller");
 const ReviewRoute = express.Router();
 
-ReviewRoute.post("/", getAllReviews);
-ReviewRoute.post("/add", addReviews);
+ReviewRoute.get("/:productId", getAllReviews);
+ReviewRoute.post("/addreview", addReviews);
 ReviewRoute.delete("/delete", deleteReviews);
 ReviewRoute.get("/top-rated", getTopRatedProducts);
 

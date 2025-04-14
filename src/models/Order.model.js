@@ -49,6 +49,10 @@ const OrderSchema = new mongoose.Schema({
   notes: {
     type: String,
   },
+  Orderdate: {
+    type: Date,
+    default: Date.now,
+  },
 });
 
 module.exports = mongoose.model("Order", OrderSchema);

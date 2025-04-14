@@ -47,7 +47,7 @@ const createOrder = async (req, res) => {
   }
 };
 
-const getOrderById = async (req,   res) => {
+const getOrderById = async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -75,7 +75,67 @@ const getOrderById = async (req,   res) => {
 //get all for admin
 const getAllOrders = async (req, res) => {
   try {
-    const orders = await OrderModel.find().sort({ createdAt: -1 });
+    const {
+      startDate,
+      endDate,
+      specificDate,
+      dateRange, // e.g., 'today', 'yesterday', 'last7days', 'thisMonth'
+    } = req.body;
+
+    let filter = {};
+
+    if (startDate || endDate || specificDate || dateRange) {
+      filter.Orderdate = {};
+
+      // Specific date filter
+      if (specificDate) {
+        const date = new Date(specificDate);
+        filter.Orderdate = {
+          $gte: new Date(date.setHours(0, 0, 0, 0)),
+          $lte: new Date(date.setHours(23, 59, 59, 999)),
+        };
+      }
+      // Date range filter
+      else if (startDate || endDate) {
+        if (startDate) filter.Orderdate.$gte = new Date(startDate);
+        if (endDate) filter.Orderdate.$lte = new Date(endDate);
+      }
+      // Predefined date ranges
+      else if (dateRange) {
+        const now = new Date();
+        switch (dateRange.toLowerCase()) {
+          case "today":
+            filter.Orderdate = {
+              $gte: new Date(now.setHours(0, 0, 0, 0)),
+              $lte: new Date(now.setHours(23, 59, 59, 999)),
+            };
+            break;
+          case "yesterday":
+            const yesterday = new Date(now.setDate(now.getDate() - 1));
+            filter.Orderdate = {
+              $gte: new Date(yesterday.setHours(0, 0, 0, 0)),
+              $lte: new Date(yesterday.setHours(23, 59, 59, 999)),
+            };
+            break;
+          case "last7days":
+            filter.Orderdate = {
+              $gte: new Date(now.setDate(now.getDate() - 7)),
+              $lte: new Date(),
+            };
+            break;
+          case "thismonth":
+            filter.Orderdate = {
+              $gte: new Date(now.getFullYear(), now.getMonth(), 1),
+              $lte: new Date(),
+            };
+            break;
+          default:
+            break;
+        }
+      }
+    }
+
+    const orders = await OrderModel.find(filter).sort({ Orderdate: -1 });
 
     return res
       .status(200)
