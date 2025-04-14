@@ -5,17 +5,14 @@ const { uploadToCloudinary } = require("../utils/Cloudinary.utils");
 
 const getAllTiffinMenu = async (req, res) => {
   try {
-    console.log(req.body);
     const { Active, day } = req.body;
 
     const filter = {};
 
-    // Add day filter if provided
     if (typeof day === "string" && day.trim() !== "") {
       filter.day = day;
     }
 
-    // Add Active filter only if explicitly boolean
     if (typeof Active === "boolean") {
       filter.Active = Active;
     }
@@ -41,7 +38,8 @@ const getAllTiffinMenu = async (req, res) => {
 
 const createTiffinMenu = async (req, res) => {
   try {
-    const { day, items, date, subTotal, totalAmount } = req.body;
+    const { day, items, date, subTotal, totalAmount, description, category } =
+      req.body;
     const imageFiles = req.files;
 
     if (!day || !items || items.length === 0) {
@@ -122,6 +120,8 @@ const createTiffinMenu = async (req, res) => {
       subTotal: subTotal ? String(subTotal) : "0",
       totalAmount: totalAmount ? String(totalAmount) : "0",
       image_url,
+      description,
+      category,
       Active: true,
     });
 
