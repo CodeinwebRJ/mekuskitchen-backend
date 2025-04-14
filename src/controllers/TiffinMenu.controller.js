@@ -1,9 +1,11 @@
 const ApiError = require("../utils/ApiError");
 const ApiResponse = require("../utils/ApiResponse");
 const TiffinMenuModel = require("../models/TiffinMenu.model");
+const { uploadToCloudinary } = require("../utils/Cloudinary.utils");
 
 const getAllTiffinMenu = async (req, res) => {
   try {
+    console.log(req.body);
     const { Active, day } = req.body;
 
     const filter = {};
@@ -40,27 +42,86 @@ const getAllTiffinMenu = async (req, res) => {
 const createTiffinMenu = async (req, res) => {
   try {
     const { day, items, date, subTotal, totalAmount } = req.body;
+    const imageFiles = req.files;
 
     if (!day || !items || items.length === 0) {
       return res
         .status(400)
-        .json(new ApiError(400, "Day and items are required"));
+        .json(new ApiError(400, "Day and non-empty items array are required"));
     }
-
-    const existingTiffin = await TiffinMenuModel.findOne({ day });
-
-    if (existingTiffin) {
+    if (!imageFiles || !Array.isArray(imageFiles) || imageFiles.length === 0) {
       return res
         .status(400)
-        .json(new ApiError(400, `Tiffin menu for ${day} already exists`));
+        .json(new ApiError(400, "At least one image file is required"));
+    }
+
+    if (
+      (subTotal !== undefined && isNaN(subTotal)) ||
+      (totalAmount !== undefined && isNaN(totalAmount))
+    ) {
+      return res
+        .status(400)
+        .json(
+          new ApiError(400, "subTotal and totalAmount must be valid numbers")
+        );
+    }
+
+    if (date && isNaN(Date.parse(date))) {
+      return res.status(400).json(new ApiError(400, "Invalid date format"));
+    }
+
+    const existingTiffin = await TiffinMenuModel.findOne({ day, date });
+    if (existingTiffin) {
+      return res
+        .status(409)
+        .json(
+          new ApiError(409, `Tiffin menu for ${day} on ${date} already exists`)
+        );
+    }
+
+    let parsedItems;
+    if (typeof items === "string") {
+      try {
+        parsedItems = JSON.parse(items);
+      } catch (error) {
+        return res
+          .status(400)
+          .json(
+            new ApiError(400, "Invalid items format: Unable to parse JSON")
+          );
+      }
+    } else {
+      parsedItems = items;
+    }
+
+    if (!Array.isArray(parsedItems)) {
+      return res.status(400).json(new ApiError(400, "Items must be an array"));
+    }
+
+    const uploadPromises = imageFiles.map(async (file) => {
+      try {
+        const result = await uploadToCloudinary(file.path);
+        return result.secure_url;
+      } catch (uploadError) {
+        throw new Error(`Image upload failed: ${uploadError.message}`);
+      }
+    });
+
+    const image_url = await Promise.all(uploadPromises);
+
+    if (!image_url.every((url) => typeof url === "string" && url.trim())) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "Invalid image URLs received from upload"));
     }
 
     const newTiffin = await TiffinMenuModel.create({
       day,
-      items,
-      date,
-      subTotal,
-      totalAmount,
+      items: parsedItems,
+      date: date ? new Date(date) : undefined,
+      subTotal: subTotal ? String(subTotal) : "0",
+      totalAmount: totalAmount ? String(totalAmount) : "0",
+      image_url,
       Active: true,
     });
 
@@ -70,8 +131,16 @@ const createTiffinMenu = async (req, res) => {
         new ApiResponse(201, newTiffin, "Tiffin menu created successfully")
       );
   } catch (error) {
-    console.log(error);
-    return res.status(500).json(new ApiError(500, "Internal Server Error"));
+    console.error("Error creating tiffin menu:", error);
+    return res
+      .status(500)
+      .json(
+        new ApiError(
+          500,
+          "Failed to create tiffin menu",
+          error.message || error
+        )
+      );
   }
 };
 

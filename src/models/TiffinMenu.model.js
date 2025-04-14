@@ -40,6 +40,12 @@ const TiffinMenuSchema = new mongoose.Schema(
     subTotal: {
       type: String,
     },
+    image_url: [
+      {
+        type: String,
+        required: true,
+      },
+    ],
     totalAmount: {
       type: String,
     },
