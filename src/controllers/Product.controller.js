@@ -1,4 +1,5 @@
 const ProductModel = require("../models/Product.model");
+const TiffinModel = require("../models/TiffinMenu.model");
 const ApiError = require("../utils/ApiError");
 const ApiResponse = require("../utils/ApiResponse");
 const { uploadToCloudinary } = require("../utils/Cloudinary.utils");
@@ -219,4 +220,69 @@ const getProductById = async (req, res) => {
   }
 };
 
-module.exports = { getAllProducts, CreateProduct, getProductById };
+const RelatedProducts = async (req, res) => {
+  try {
+    const { category } = req.body;
+
+    if (!category) {
+      return res.status(400).json(new ApiError(400, "Category is required"));
+    }
+
+    if (category.toLowerCase() === "tiffin") {
+      const tiffins = await TiffinModel.aggregate([
+        {
+          $match: {
+            category: { $in: ["Tiffin"] },
+            Active: true,
+          },
+        },
+        { $sample: { size: 5 } },
+      ]);
+
+      if (tiffins.length === 0) {
+        return res
+          .status(404)
+          .json(new ApiError(404, "No active tiffins found"));
+      }
+
+      return res
+        .status(200)
+        .json(
+          new ApiResponse(
+            200,
+            tiffins,
+            "Related tiffins retrieved successfully"
+          )
+        );
+    }
+
+    const products = await ProductModel.aggregate([
+      { $match: { category: category } },
+      { $sample: { size: 5 } },
+    ]);
+
+    if (products.length === 0) {
+      return res
+        .status(404)
+        .json(new ApiError(404, "No products found in this category"));
+    }
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(200, products, "Random products retrieved successfully")
+      );
+  } catch (error) {
+    console.error("Error in RelatedProducts:", error);
+    return res
+      .status(500)
+      .json(new ApiError(500, "Internal server error", error.message));
+  }
+};
+
+module.exports = {
+  getAllProducts,
+  CreateProduct,
+  getProductById,
+  RelatedProducts,
+};

@@ -52,6 +52,9 @@ const TiffinMenuSchema = new mongoose.Schema(
     description: {
       type: String,
     },
+    category: {
+      type: String,
+    },
     Active: {
       type: Boolean,
     },

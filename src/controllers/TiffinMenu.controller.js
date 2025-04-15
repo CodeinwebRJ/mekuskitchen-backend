@@ -38,7 +38,7 @@ const getAllTiffinMenu = async (req, res) => {
 
 const createTiffinMenu = async (req, res) => {
   try {
-    const { day, items, date, subTotal, totalAmount, description, category } =
+    const { day, items, date, subTotal, totalAmount, description } =
       req.body;
     const imageFiles = req.files;
 
@@ -121,7 +121,7 @@ const createTiffinMenu = async (req, res) => {
       totalAmount: totalAmount ? String(totalAmount) : "0",
       image_url,
       description,
-      category,
+      category: "Tiffin",
       Active: true,
     });
 
