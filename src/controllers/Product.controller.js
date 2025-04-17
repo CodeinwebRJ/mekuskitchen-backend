@@ -213,7 +213,7 @@ const getProductById = async (req, res) => {
 
     return res
       .status(200)
-      .json(new ApiResponse(200, data, "Product retrieved successfully"));
+      .json(new ApiResponse(200, product, "Product retrieved successfully"));
   } catch (error) {
     console.error("Error in getProductById:", error);
     return res.status(500).json(new ApiError(500, "Internal server error"));
@@ -228,11 +228,12 @@ const RelatedProducts = async (req, res) => {
       return res.status(400).json(new ApiError(400, "Category is required"));
     }
 
+
     if (category.toLowerCase() === "tiffin") {
       const tiffins = await TiffinModel.aggregate([
         {
           $match: {
-            category: { $in: ["Tiffin"] },
+            category: { $in: ["tiffin"] },
             Active: true,
           },
         },

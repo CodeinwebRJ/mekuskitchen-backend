@@ -239,7 +239,7 @@ const updateCart = async (req, res) => {
       }
 
       const itemIndex = cart.items.findIndex(
-        (item) => item.product === product_id
+        (item) => item.product_id === product_id
       );
 
       if (itemIndex === -1) {
@@ -305,9 +305,36 @@ const updateCart = async (req, res) => {
 
     await cart.save();
 
+    // Fetch product details for items
+    const itemsWithDetails = await Promise.all(
+      cart.items.map(async (item) => {
+        const product = await ProductModel.findById(item.product_id);
+        return {
+          ...item.toObject(),
+          productDetails: product ? product.toObject() : null,
+        };
+      })
+    );
+
+    const tiffinsWithDetails = await Promise.all(
+      cart.tiffins.map(async (tiffin) => {
+        const tiffinMenu = await TiffinModel.findById(tiffin.tiffinMenuId);
+        return {
+          ...tiffin.toObject(),
+          tiffinMenuDetails: tiffinMenu ? tiffinMenu.toObject() : null,
+        };
+      })
+    );
+
+    const enrichedCart = {
+      ...cart.toObject(),
+      items: itemsWithDetails,
+      tiffins: tiffinsWithDetails,
+    };
+
     return res
       .status(200)
-      .json(new ApiResponse(200, cart, "Cart updated successfully"));
+      .json(new ApiResponse(200, enrichedCart, "Cart updated successfully"));
   } catch (error) {
     console.error(error);
     return res
