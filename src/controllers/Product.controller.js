@@ -112,11 +112,22 @@ const getAllProducts = async (req, res) => {
 
 const CreateProduct = async (req, res) => {
   try {
-    const { product_name, category, price, description, stock, subCategory } =
-      req.body;
+    const {
+      product_name,
+      category,
+      subCategory,
+      price,
+      stock,
+      title,
+      description,
+      longDescription,
+      keywords,
+      features,
+      attributes,
+    } = req.body;
+
     const imageFiles = req.files;
 
-    // Validate required fields
     if (!product_name || !category || !price || !description || !stock) {
       return res
         .status(400)
@@ -128,21 +139,33 @@ const CreateProduct = async (req, res) => {
         );
     }
 
-    // Check if image files are provided
     if (!imageFiles || !Array.isArray(imageFiles) || imageFiles.length === 0) {
       return res
         .status(400)
         .json(new ApiError(400, "At least one image file is required"));
     }
 
-    // Upload images to Cloudinary
+    const existingProduct = await ProductModel.findOne({
+      product_name,
+      category,
+    });
+    if (existingProduct) {
+      return res
+        .status(409)
+        .json(
+          new ApiError(
+            409,
+            "A product with this name already exists in this category"
+          )
+        );
+    }
+
     const uploadPromises = imageFiles.map((file) =>
       uploadToCloudinary(file.path)
     );
     const uploadResults = await Promise.all(uploadPromises);
     const image_url = uploadResults.map((result) => result.secure_url);
 
-    // Validate image URLs
     if (
       !image_url.every((url) => typeof url === "string" && url.trim() !== "")
     ) {
@@ -151,27 +174,24 @@ const CreateProduct = async (req, res) => {
         .json(new ApiError(400, "All uploaded images must have valid URLs"));
     }
 
-    const existingProduct = await ProductModel.findOne({ product_name });
-    if (existingProduct) {
-      return res
-        .status(409)
-        .json(new ApiError(409, "A product with this name already exists"));
-    }
-
-    // Create new product
     const newProduct = await ProductModel.create({
       product_name,
       category,
+      subCategory: subCategory || "",
       price: Number(price),
-      image_url,
-      description,
-      subCategory: subCategory,
       stock: Number(stock),
+      image_url,
+      title: title || "",
+      description,
+      longDescription: longDescription || "",
+      keywords: Array.isArray(keywords) ? keywords : [],
+      features: Array.isArray(features) ? features : [],
+      attributes: Array.isArray(attributes) ? attributes : [],
     });
 
     return res
       .status(201)
-      .json(new ApiResponse(201, newProduct, "Product Created Successfully"));
+      .json(new ApiResponse(201, newProduct, "Product created successfully"));
   } catch (error) {
     console.error("Error creating product:", error);
     return res.status(500).json(new ApiError(500, "Internal server error"));
@@ -227,7 +247,6 @@ const RelatedProducts = async (req, res) => {
     if (!category) {
       return res.status(400).json(new ApiError(400, "Category is required"));
     }
-
 
     if (category.toLowerCase() === "tiffin") {
       const tiffins = await TiffinModel.aggregate([
