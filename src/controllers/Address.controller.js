@@ -49,6 +49,13 @@ const createAddress = async (req, res) => {
         .json(new ApiError(400, "Billing address details are incomplete"));
     }
 
+    const addressCount = await AddressModel.countDocuments({ user: userId });
+    if (addressCount >= 3) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "You can only create up to 3 addresses"));
+    }
+
     if (isActive) {
       await AddressModel.updateMany({ user: userId }, { isActive: false });
     }
@@ -169,6 +176,7 @@ const updateAddress = async (req, res) => {
 
 const deleteAddress = async (req, res) => {
   try {
+    console.log("object")
     const { userId, addressId } = req.body;
 
     if (!userId || !addressId) {
@@ -177,10 +185,12 @@ const deleteAddress = async (req, res) => {
         .json(new ApiError(400, "User ID and Address ID are required"));
     }
 
-    const address = await AddressModel.findOneAndDelete({
+    const address = await AddressModel.findOne({
       _id: addressId,
       user: userId,
     });
+
+    console.log(address)
 
     if (!address) {
       return res
@@ -188,10 +198,26 @@ const deleteAddress = async (req, res) => {
         .json(new ApiError(404, "Address not found or already deleted"));
     }
 
+    const wasActive = address.isActive;
+
+    await AddressModel.deleteOne({ _id: addressId });
+
+    if (wasActive) {
+      const firstAddress = await AddressModel.findOne({ user: userId }).sort({
+        createdAt: 1,
+      });
+
+      if (firstAddress) {
+        firstAddress.isActive = true;
+        await firstAddress.save();
+      }
+    }
+
     return res
       .status(200)
       .json(new ApiResponse(200, null, "Address deleted successfully"));
   } catch (error) {
+    console.error("Error deleting address:", error);
     return res
       .status(500)
       .json(
@@ -203,9 +229,45 @@ const deleteAddress = async (req, res) => {
   }
 };
 
+const ActiveAddress = async (req, res) => {
+  try {
+    const { userId, addressId } = req.body;
+
+    if (!userId || !addressId) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "User ID and Address ID are required"));
+    }
+
+    await AddressModel.updateMany({ user: userId }, { isActive: false });
+
+    const activeAddress = await AddressModel.findOneAndUpdate(
+      { _id: addressId, user: userId },
+      { isActive: true },
+      { new: true }
+    );
+
+    if (!activeAddress) {
+      return res.status(404).json(new ApiError(404, "Address not found"));
+    }
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(200, activeAddress, "Address activated successfully")
+      );
+  } catch (error) {
+    console.error("Error activating address:", error);
+    return res
+      .status(500)
+      .json(new ApiError(500, "Something went wrong while activating address"));
+  }
+};
+
 module.exports = {
   getUserAddress,
   createAddress,
   updateAddress,
   deleteAddress,
+  ActiveAddress,
 };

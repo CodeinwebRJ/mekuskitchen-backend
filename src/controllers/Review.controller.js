@@ -100,40 +100,33 @@ const getTopRatedProducts = async (req, res) => {
       {
         $group: {
           _id: "$product_id",
-          avgRating: { $avg: "$rating" },
+          averageRating: { $avg: "$rating" },
           totalReviews: { $sum: 1 },
         },
       },
       {
-        $sort: { avgRating: -1, totalReviews: -1 },
+        $sort: {
+          averageRating: -1,
+        },
       },
       {
-        $limit: 5,
+        $limit: 3,
+      },
+      {
+        $project: {
+          productId: "$_id",
+          averageRating: { $round: ["$averageRating", 2] },
+          totalReviews: 1,
+          _id: 0,
+        },
       },
     ]);
 
-    const productIds = topProducts.map((p) => p._id);
-    const products = await ProductModel.find({ _id: { $in: productIds } });
-
-    const responseData = topProducts.map((product) => {
-      const productDetails = products.find(
-        (p) => p._id.toString() === product._id.toString()
-      );
-      return {
-        ...productDetails._doc,
-        avgRating: product.avgRating,
-        totalReviews: product.totalReviews,
-      };
-    });
-
-    res
-      .status(200)
-      .json(new ApiResponse(200, responseData, "Get Top food successfully"));
+    res.status(200).json(new ApiResponse(200, topProducts, "Top products"));
   } catch (error) {
-    res.status(500).json(new ApiError(500, error.message));
+    res.status(500).json(new ApiError(500, "Internal Server Error"));
   }
 };
-
 module.exports = {
   getAllReviews,
   addReviews,

@@ -10,6 +10,6 @@ const ReviewRoute = express.Router();
 ReviewRoute.get("/:productId", getAllReviews);
 ReviewRoute.post("/addreview", addReviews);
 ReviewRoute.delete("/delete", deleteReviews);
-ReviewRoute.get("/top-rated", getTopRatedProducts);
+ReviewRoute.get("/product/top-rated", getTopRatedProducts);
 
 module.exports = ReviewRoute;
