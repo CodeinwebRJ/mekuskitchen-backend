@@ -113,20 +113,45 @@ const getTopRatedProducts = async (req, res) => {
         $limit: 3,
       },
       {
+        $addFields: {
+          productObjectId: { $toObjectId: "$_id" },
+        },
+      },
+      {
+        $lookup: {
+          from: "products", 
+          localField: "productObjectId",
+          foreignField: "_id",
+          as: "productDetails",
+        },
+      },
+      {
+        $unwind: "$productDetails",
+      },
+      {
         $project: {
           productId: "$_id",
           averageRating: { $round: ["$averageRating", 2] },
           totalReviews: 1,
           _id: 0,
+          productDetails: {
+            product_name: "$productDetails.product_name",
+            price: "$productDetails.price",
+            image_url: "$productDetails.image_url",
+            title: "$productDetails.title",
+            description: "$productDetails.description",
+          },
         },
       },
     ]);
 
-    res.status(200).json(new ApiResponse(200, topProducts, "Top products"));
+    res.status(200).json(new ApiResponse(200, topProducts, "Top rated products fetched successfully"));
   } catch (error) {
+    console.error('Error fetching top products:', error);
     res.status(500).json(new ApiError(500, "Internal Server Error"));
   }
 };
+
 module.exports = {
   getAllReviews,
   addReviews,
