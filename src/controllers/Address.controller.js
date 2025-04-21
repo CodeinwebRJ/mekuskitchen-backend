@@ -38,12 +38,7 @@ const createAddress = async (req, res) => {
       return res.status(400).json(new ApiError(400, "User ID is required"));
     }
 
-    if (
-      !billing ||
-      !billing.firstName ||
-      !billing.lastName ||
-      !billing.address
-    ) {
+    if (!billing.firstName || !billing.lastName || !billing.address) {
       return res
         .status(400)
         .json(new ApiError(400, "Billing address details are incomplete"));
@@ -56,14 +51,14 @@ const createAddress = async (req, res) => {
         .json(new ApiError(400, "You can only create up to 3 addresses"));
     }
 
-    if (isActive) {
+    if (userId) {
       await AddressModel.updateMany({ user: userId }, { isActive: false });
     }
 
     const newAddress = new AddressModel({
       user: userId,
       isDifferent: !!isDifferent,
-      isActive: !!isActive,
+      isActive: true,
       billing: {
         firstName: billing.firstName,
         lastName: billing.lastName,
@@ -176,7 +171,7 @@ const updateAddress = async (req, res) => {
 
 const deleteAddress = async (req, res) => {
   try {
-    console.log("object")
+    console.log("object");
     const { userId, addressId } = req.body;
 
     if (!userId || !addressId) {
@@ -190,7 +185,7 @@ const deleteAddress = async (req, res) => {
       user: userId,
     });
 
-    console.log(address)
+    console.log(address);
 
     if (!address) {
       return res
