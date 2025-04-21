@@ -305,31 +305,8 @@ const updateCart = async (req, res) => {
 
     await cart.save();
 
-    // Fetch product details for items
-    const itemsWithDetails = await Promise.all(
-      cart.items.map(async (item) => {
-        const product = await ProductModel.findById(item.product_id);
-        return {
-          ...item.toObject(),
-          productDetails: product ? product.toObject() : null,
-        };
-      })
-    );
-
-    const tiffinsWithDetails = await Promise.all(
-      cart.tiffins.map(async (tiffin) => {
-        const tiffinMenu = await TiffinModel.findById(tiffin.tiffinMenuId);
-        return {
-          ...tiffin.toObject(),
-          tiffinMenuDetails: tiffinMenu ? tiffinMenu.toObject() : null,
-        };
-      })
-    );
-
     const enrichedCart = {
       ...cart.toObject(),
-      items: itemsWithDetails,
-      tiffins: tiffinsWithDetails,
     };
 
     return res

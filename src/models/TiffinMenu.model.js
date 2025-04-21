@@ -29,6 +29,9 @@ const TiffinMenuSchema = new mongoose.Schema(
         quantityUnit: {
           type: String,
         },
+        weight: {
+          type: String,
+        },
         description: {
           type: String,
         },

@@ -126,7 +126,9 @@ const CreateProduct = async (req, res) => {
       attributes,
     } = req.body;
 
-    const imageFiles = req.files;
+    console.log(req.body);
+
+    // const imageFiles = req.files;
 
     if (!product_name || !category || !price || !description || !stock) {
       return res
@@ -139,11 +141,11 @@ const CreateProduct = async (req, res) => {
         );
     }
 
-    if (!imageFiles || imageFiles.length === 0) {
-      return res
-        .status(400)
-        .json(new ApiError(400, "At least one image file is required"));
-    }
+    // if (!imageFiles || imageFiles.length === 0) {
+    //   return res
+    //     .status(400)
+    //     .json(new ApiError(400, "At least one image file is required"));
+    // }
 
     const existingProduct = await ProductModel.findOne({
       product_name,
@@ -160,19 +162,19 @@ const CreateProduct = async (req, res) => {
         );
     }
 
-    const uploadPromises = imageFiles.map((file) =>
-      uploadToCloudinary(file.path)
-    );
-    const uploadResults = await Promise.all(uploadPromises);
-    const image_url = uploadResults.map((result) => result.secure_url);
+    // const uploadPromises = imageFiles.map((file) =>
+    //   uploadToCloudinary(file.path)
+    // );
+    // const uploadResults = await Promise.all(uploadPromises);
+    // const image_url = uploadResults.map((result) => result.secure_url);
 
-    if (
-      !image_url.every((url) => typeof url === "string" && url.trim() !== "")
-    ) {
-      return res
-        .status(400)
-        .json(new ApiError(400, "All uploaded images must have valid URLs"));
-    }
+    // if (
+    //   !image_url.every((url) => typeof url === "string" && url.trim() !== "")
+    // ) {
+    //   return res
+    //     .status(400)
+    //     .json(new ApiError(400, "All uploaded images must have valid URLs"));
+    // }
 
     const newProduct = await ProductModel.create({
       product_name,
@@ -180,7 +182,7 @@ const CreateProduct = async (req, res) => {
       subCategory: subCategory || "",
       price: price,
       stock: stock,
-      image_url,
+      // image_url,
       title: title || "",
       description,
       longDescription: longDescription || "",
@@ -252,7 +254,7 @@ const RelatedProducts = async (req, res) => {
       const tiffins = await TiffinModel.aggregate([
         {
           $match: {
-            category: { $in: ["tiffin"] },
+            category: { $in: ["Tiffin"] },
             Active: true,
           },
         },
@@ -300,9 +302,86 @@ const RelatedProducts = async (req, res) => {
   }
 };
 
+
+// TODO : change Image Upload Flow add File formate.
+const EditProduct = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      product_name,
+      category,
+      subCategory,
+      price,
+      stock,
+      image_url,
+      title,
+      description,
+      longDescription,
+      keywords,
+      features,
+      attributes,
+    } = req.body;
+
+    // const imageFiles = req.files;
+
+    if (!id) {
+      return res.status(400).json(new ApiError(400, "Product ID is required"));
+    }
+
+    const updateData = {};
+    const fields = {
+      product_name,
+      category,
+      subCategory,
+      price,
+      stock,
+      image_url,
+      title,
+      description,
+      longDescription,
+      keywords,
+      features,
+      attributes,
+    };
+
+    Object.keys(fields).forEach((key) => {
+      if (fields[key] !== undefined) {
+        updateData[key] = fields[key];
+      }
+    });
+
+    updateData.updatedAt = new Date();
+
+    if (Object.keys(updateData).length === 1) { 
+      return res.status(400).json(new ApiError(400, "No valid fields provided for update"));
+    }
+
+    const updatedProduct = await ProductModel.findByIdAndUpdate(
+      id,
+      { $set: updateData },
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedProduct) {
+      return res.status(404).json(new ApiError(404, "Product not found"));
+    }
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(200, updatedProduct, "Product updated successfully")
+      );
+  } catch (error) {
+    console.error("Error updating product:", error);
+    return res.status(500).json(new ApiError(500, "Internal server error"));
+  }
+};
+
+
 module.exports = {
   getAllProducts,
   CreateProduct,
   getProductById,
   RelatedProducts,
+  EditProduct,
 };
