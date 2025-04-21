@@ -139,7 +139,7 @@ const CreateProduct = async (req, res) => {
         );
     }
 
-    if (!imageFiles || !Array.isArray(imageFiles) || imageFiles.length === 0) {
+    if (!imageFiles || imageFiles.length === 0) {
       return res
         .status(400)
         .json(new ApiError(400, "At least one image file is required"));
@@ -178,15 +178,15 @@ const CreateProduct = async (req, res) => {
       product_name,
       category,
       subCategory: subCategory || "",
-      price: Number(price),
-      stock: Number(stock),
+      price: price,
+      stock: stock,
       image_url,
       title: title || "",
       description,
       longDescription: longDescription || "",
-      keywords: Array.isArray(keywords) ? keywords : [],
-      features: Array.isArray(features) ? features : [],
-      attributes: Array.isArray(attributes) ? attributes : [],
+      keywords: keywords ? keywords : [],
+      features: features ? features : [],
+      attributes: attributes ? attributes : [],
     });
 
     return res
