@@ -30,6 +30,7 @@ const ProductSchema = new mongoose.Schema(
     longDescription: { type: String },
     keywords: [{ type: String }],
     features: [{ type: String }],
+    Active: { type: Boolean },
     attributes: [
       {
         name: { type: String },
@@ -43,6 +44,12 @@ const ProductSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+    toJSON: {
+      transform: (doc, ret) => {
+        delete ret.Active;
+        return ret;
+      },
+    },
   }
 );
 

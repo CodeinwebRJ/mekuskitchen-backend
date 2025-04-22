@@ -185,6 +185,7 @@ const CreateProduct = async (req, res) => {
       // image_url,
       title: title || "",
       description,
+      Active: true,
       longDescription: longDescription || "",
       keywords: keywords ? keywords : [],
       features: features ? features : [],
@@ -302,7 +303,6 @@ const RelatedProducts = async (req, res) => {
   }
 };
 
-
 // TODO : change Image Upload Flow add File formate.
 const EditProduct = async (req, res) => {
   try {
@@ -320,9 +320,8 @@ const EditProduct = async (req, res) => {
       keywords,
       features,
       attributes,
+      Active, 
     } = req.body;
-
-    // const imageFiles = req.files;
 
     if (!id) {
       return res.status(400).json(new ApiError(400, "Product ID is required"));
@@ -342,6 +341,7 @@ const EditProduct = async (req, res) => {
       keywords,
       features,
       attributes,
+      Active, 
     };
 
     Object.keys(fields).forEach((key) => {
@@ -352,8 +352,10 @@ const EditProduct = async (req, res) => {
 
     updateData.updatedAt = new Date();
 
-    if (Object.keys(updateData).length === 1) { 
-      return res.status(400).json(new ApiError(400, "No valid fields provided for update"));
+    if (Object.keys(updateData).length === 1) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "No valid fields provided for update"));
     }
 
     const updatedProduct = await ProductModel.findByIdAndUpdate(
@@ -376,7 +378,6 @@ const EditProduct = async (req, res) => {
     return res.status(500).json(new ApiError(500, "Internal server error"));
   }
 };
-
 
 module.exports = {
   getAllProducts,

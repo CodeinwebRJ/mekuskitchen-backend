@@ -8,6 +8,7 @@ const AddressRoute = require("./routes/Address.route");
 const OrderRoute = require("./routes/Order.route");
 const TiffinMenuRoute = require("./routes/TiffinMenu.route");
 const ContactRoute = require("./routes/Contact.route");
+const WishlistRoute = require("./routes/Wishlist.route");
 require("dotenv").config();
 
 const app = express();
@@ -30,9 +31,10 @@ app.get("/", (req, res) => {
 app.use("/api/v1/product", ProductRoute);
 app.use("/api/v1/review", ReviewRoute);
 app.use("/api/v1/cart", CartRoute);
-app.use("/api/v1/address", AddressRoute)
-app.use("/api/v1/order" , OrderRoute)
-app.use("/api/v1/tiffin-menu" , TiffinMenuRoute)
-app.use("/api/v1/contact" , ContactRoute)
+app.use("/api/v1/address", AddressRoute);
+app.use("/api/v1/order", OrderRoute);
+app.use("/api/v1/tiffin-menu", TiffinMenuRoute);
+app.use("/api/v1/contact", ContactRoute);
+app.use("/api/v1/wishlist", WishlistRoute);
 
 module.exports = app;

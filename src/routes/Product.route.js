@@ -5,6 +5,7 @@ const {
   getProductById,
   RelatedProducts,
   EditProduct,
+  ActiveProduct,
 } = require("../controllers/Product.controller");
 const upload = require("../middlewares/Multer.middleware");
 
