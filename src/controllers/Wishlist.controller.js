@@ -72,45 +72,46 @@ const addToWishlist = async (req, res) => {
 
 const removeItems = async (req, res) => {
   try {
-    const { userid, productId } = req.body;
+    const { userid, product_id } = req.body;
+    console.log("User ID:", userid, "Product ID:", product_id);
 
-    console.log("User ID:", userid, "Product ID:", productId);
-
-    if (!userid || !productId) {
+    if (!userid || !product_id) {
       return res
         .status(400)
         .json(new ApiError(400, "User ID and Product ID are required"));
     }
 
-    const wishlist = await WishlistModel.findOne({ userid });
+    const wishlist = await WishlistModel.findOneAndUpdate(
+      { userid },
+      {
+        $pull: { items: { productId: product_id } },
+      },
+      { new: true }
+    ).populate("items.productId");
+
+    console.log(wishlist);
 
     if (!wishlist) {
       return res.status(404).json(new ApiError(404, "Wishlist not found"));
     }
 
-    const originalLength = wishlist.items.length;
-    wishlist.items = wishlist.items.filter(
-      (item) => item.productId.toString() !== productId.toString()
+    const itemExists = wishlist.items.some(
+      (item) => item.productId.toString() === product_id.toString()
     );
-
-    if (wishlist.items.length === originalLength) {
+    if (itemExists) {
       return res
         .status(404)
         .json(new ApiError(404, "Product not found in wishlist"));
     }
 
-    await wishlist.save();
-    await WishlistModel.findOne({ userid }).populate("items.productId");
-
     return res
       .status(200)
       .json(new ApiResponse(200, null, "Product removed from wishlist"));
   } catch (error) {
-    console.error(error);
+    console.error("Error removing item from wishlist:", error);
     return res.status(500).json(new ApiError(500, "Internal Server Error"));
   }
 };
-
 module.exports = {
   getUserWishlist,
   addToWishlist,
