@@ -24,7 +24,7 @@ const TiffinMenuSchema = new mongoose.Schema(
           type: String,
         },
         quantity: {
-          type: String,
+          type: Number,
         },
         quantityUnit: {
           type: String,

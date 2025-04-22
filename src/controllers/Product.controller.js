@@ -218,7 +218,7 @@ const CreateProduct = async (req, res) => {
       );
     }
   }
-};
+};  
 
 const getProductById = async (req, res) => {
   try {

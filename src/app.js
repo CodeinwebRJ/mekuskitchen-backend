@@ -9,6 +9,7 @@ const OrderRoute = require("./routes/Order.route");
 const TiffinMenuRoute = require("./routes/TiffinMenu.route");
 const ContactRoute = require("./routes/Contact.route");
 const WishlistRoute = require("./routes/Wishlist.route");
+const CountRoute = require("./routes/CountRoute.route");
 require("dotenv").config();
 
 const app = express();
@@ -36,5 +37,6 @@ app.use("/api/v1/order", OrderRoute);
 app.use("/api/v1/tiffin-menu", TiffinMenuRoute);
 app.use("/api/v1/contact", ContactRoute);
 app.use("/api/v1/wishlist", WishlistRoute);
+app.use("/api/v1/count", CountRoute);
 
 module.exports = app;
