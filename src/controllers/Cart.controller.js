@@ -134,15 +134,31 @@ const addToCart = async (req, res) => {
           .json(new ApiError(400, "Invalid tiffin quantity"));
       }
 
-      cart.tiffins.push({
-        tiffinMenuId,
-        customizedItems,
-        specialInstructions: specialInstructions || "",
-        orderDate,
-        day,
-        quantity: tiffinQuantity,
-        totalAmount: (tiffinTotal * tiffinQuantity).toFixed(2),
-      });
+      // Check if a tiffin with the same tiffinMenuId, orderDate, and day exists
+      const tiffinIndex = cart.tiffins.findIndex(
+        (tiffin) =>
+          tiffin.tiffinMenuId === tiffinMenuId &&
+          tiffin.orderDate === orderDate &&
+          tiffin.day === day
+      );
+
+      if (tiffinIndex > -1) {
+        // Update existing tiffin's quantity and totalAmount
+        cart.tiffins[tiffinIndex].quantity += tiffinQuantity;
+        cart.tiffins[tiffinIndex].totalAmount = (
+          tiffinTotal * cart.tiffins[tiffinIndex].quantity
+        ).toFixed(2);
+      } else {  
+        cart.tiffins.push({
+          tiffinMenuId,
+          customizedItems,
+          specialInstructions: specialInstructions || "",
+          orderDate,
+          day,
+          quantity: tiffinQuantity,
+          totalAmount: (tiffinTotal * tiffinQuantity).toFixed(2),
+        });
+      }
     }
     // Handle Product
     else {
@@ -201,7 +217,7 @@ const addToCart = async (req, res) => {
       .status(500)
       .json(new ApiError(500, "Internal Server Error", [error.message]));
   }
-};
+};  
 
 const updateCart = async (req, res) => {
   try {

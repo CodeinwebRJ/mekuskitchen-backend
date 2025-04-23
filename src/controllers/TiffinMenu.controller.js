@@ -38,8 +38,7 @@ const getAllTiffinMenu = async (req, res) => {
 
 const createTiffinMenu = async (req, res) => {
   try {
-    const { day, items, date, subTotal, totalAmount, description } =
-      req.body;
+    const { day, items, date, subTotal, totalAmount, description } = req.body;
     const imageFiles = req.files;
 
     if (!day || !items || items.length === 0) {
@@ -194,7 +193,6 @@ const deleteTiffinMenu = async (req, res) => {
     return res.status(500).json(new ApiError(500, "Internal Server Error"));
   }
 };
-
 
 module.exports = {
   getAllTiffinMenu,
