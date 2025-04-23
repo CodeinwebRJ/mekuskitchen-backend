@@ -73,7 +73,6 @@ const addToWishlist = async (req, res) => {
 const removeItems = async (req, res) => {
   try {
     const { userid, product_id } = req.body;
-    console.log("User ID:", userid, "Product ID:", product_id);
 
     if (!userid || !product_id) {
       return res

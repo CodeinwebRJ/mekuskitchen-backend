@@ -205,14 +205,7 @@ const addToCart = async (req, res) => {
 
 const updateCart = async (req, res) => {
   try {
-    const {
-      user_id,
-      product_id,
-      tiffinMenuId,
-      day,
-      quantity,
-      type, // 'product' or 'tiffin'
-    } = req.body;
+    const { user_id, product_id, tiffinMenuId, day, quantity, type } = req.body;
 
     if (!user_id || quantity == null || !type) {
       return res
@@ -305,8 +298,30 @@ const updateCart = async (req, res) => {
 
     await cart.save();
 
+    const itemsWithDetails = await Promise.all(
+      cart.items.map(async (item) => {
+        const product = await ProductModel.findById(item.product_id);
+        return {
+          ...item.toObject(),
+          productDetails: product ? product.toObject() : null,
+        };
+      })
+    );
+
+    const tiffinsWithDetails = await Promise.all(
+      cart.tiffins.map(async (tiffin) => {
+        const tiffinMenu = await TiffinModel.findById(tiffin.tiffinMenuId);
+        return {
+          ...tiffin.toObject(),
+          tiffinMenuDetails: tiffinMenu ? tiffinMenu.toObject() : null,
+        };
+      })
+    );
+
     const enrichedCart = {
       ...cart.toObject(),
+      items: itemsWithDetails,
+      tiffins: tiffinsWithDetails,
     };
 
     return res
