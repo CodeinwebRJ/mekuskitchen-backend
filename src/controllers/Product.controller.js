@@ -218,7 +218,7 @@ const CreateProduct = async (req, res) => {
       );
     }
   }
-};  
+};
 
 const getProductById = async (req, res) => {
   try {
@@ -320,7 +320,7 @@ const EditProduct = async (req, res) => {
       keywords,
       features,
       attributes,
-      Active, 
+      Active,
     } = req.body;
 
     if (!id) {
@@ -341,7 +341,7 @@ const EditProduct = async (req, res) => {
       keywords,
       features,
       attributes,
-      Active, 
+      Active,
     };
 
     Object.keys(fields).forEach((key) => {
@@ -379,10 +379,44 @@ const EditProduct = async (req, res) => {
   }
 };
 
+const getCategoryList = async (req, res) => {
+  try {
+    const categories = await ProductModel.distinct("category");
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(200, categories, "Category list fetched successfully")
+      );
+  } catch (error) {
+    console.error("Error in getCategoryList:", error);
+    return res.status(500).json(new ApiError(500, "Internal server error"));
+  }
+};
+
+const getSubCategoryList = async (req, res) => {
+  try {
+    const subCategory = await ProductModel.distinct("subCategory");
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          subCategory,
+          "subCategory list fetched successfully"
+        )
+      );
+  } catch (error) {
+    console.error("Error in getsubCategoryList:", error);
+    return res.status(500).json(new ApiError(500, "Internal server error"));
+  }
+};
+
 module.exports = {
   getAllProducts,
   CreateProduct,
   getProductById,
   RelatedProducts,
   EditProduct,
+  getCategoryList,
+  getSubCategoryList,
 };

@@ -5,7 +5,8 @@ const {
   getProductById,
   RelatedProducts,
   EditProduct,
-  ActiveProduct,
+  getCategoryList,
+  getSubCategoryList,
 } = require("../controllers/Product.controller");
 const upload = require("../middlewares/Multer.middleware");
 
@@ -16,5 +17,7 @@ ProductRoute.post("/create", upload.array("images"), CreateProduct);
 ProductRoute.post("/:id", getProductById);
 ProductRoute.post("/category/related", RelatedProducts);
 ProductRoute.put("/category/:id", EditProduct);
+ProductRoute.get("/category", getCategoryList);
+ProductRoute.get("/subCategory", getSubCategoryList);
 
 module.exports = ProductRoute;

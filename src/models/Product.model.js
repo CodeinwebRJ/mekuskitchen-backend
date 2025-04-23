@@ -44,7 +44,7 @@ const ProductSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-    toJSON: {
+    toObject: {
       transform: (doc, ret) => {
         delete ret.Active;
         return ret;

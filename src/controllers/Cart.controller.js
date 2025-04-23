@@ -31,7 +31,6 @@ const getUserCart = async (req, res) => {
       );
     }
 
-    // Fetch product details for items
     const itemsWithDetails = await Promise.all(
       cart.items.map(async (item) => {
         const product = await ProductModel.findById(item.product_id);
@@ -42,7 +41,6 @@ const getUserCart = async (req, res) => {
       })
     );
 
-    // Fetch tiffin menu details for tiffins
     const tiffinsWithDetails = await Promise.all(
       cart.tiffins.map(async (tiffin) => {
         const tiffinMenu = await TiffinModel.findById(tiffin.tiffinMenuId);
@@ -53,7 +51,6 @@ const getUserCart = async (req, res) => {
       })
     );
 
-    // Create updated cart object with enriched data
     const enrichedCart = {
       ...cart.toObject(),
       items: itemsWithDetails,
@@ -299,7 +296,6 @@ const updateCart = async (req, res) => {
         .json(new ApiError(400, "Invalid type. Must be 'product' or 'tiffin'"));
     }
 
-    // Recalculate total cart amount
     const productTotal = cart.items.reduce(
       (sum, item) => sum + parseFloat(item.price) * item.quantity,
       0
