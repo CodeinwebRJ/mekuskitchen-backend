@@ -1,22 +1,5 @@
 const mongoose = require("mongoose");
 
-// const VariantSchema = new mongoose.Schema({
-//   sku: { type: String, trim: true },
-//   price: { type: Number, required: true, min: 0 },
-//   stock: { type: Number, required: true, min: 0 },
-//   attributes: {
-//     type: Map,
-//     of: String,
-//     required: true,
-//   },
-//   image_url: [
-//     {
-//       type: String,
-//       trim: true,
-//     },
-//   ],
-// });
-
 const ProductSchema = new mongoose.Schema(
   {
     product_name: { type: String },
@@ -40,7 +23,10 @@ const ProductSchema = new mongoose.Schema(
         priceMap: { type: Map, of: Number },
       },
     ],
-    // variants: [VariantSchema],
+    specifications: {
+      type: Map,
+      of: mongoose.Schema.Types.Mixed,
+    },
   },
   {
     timestamps: true,

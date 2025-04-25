@@ -110,6 +110,7 @@ const getAllProducts = async (req, res) => {
   }
 };
 
+// Todo \ add Inage Upload Flow
 const CreateProduct = async (req, res) => {
   try {
     const {
@@ -124,9 +125,8 @@ const CreateProduct = async (req, res) => {
       keywords,
       features,
       attributes,
+      specifications,
     } = req.body;
-
-    console.log(req.body);
 
     // const imageFiles = req.files;
 
@@ -190,8 +190,8 @@ const CreateProduct = async (req, res) => {
       keywords: keywords ? keywords : [],
       features: features ? features : [],
       attributes: attributes ? attributes : [],
+      specifications: specifications,
     });
-
     return res
       .status(201)
       .json(new ApiResponse(201, newProduct, "Product created successfully"));
@@ -379,6 +379,7 @@ const EditProduct = async (req, res) => {
   }
 };
 
+// get category list
 const getCategoryList = async (req, res) => {
   try {
     const categories = await ProductModel.distinct("category");
