@@ -1,44 +1,144 @@
 const mongoose = require("mongoose");
 
-const ProductSchema = new mongoose.Schema(
+const ProductSchema = mongoose.Schema(
   {
-    product_name: { type: String },
-    category: { type: String },
-    subCategory: { type: String },
-    price: { type: Number },
-    image_url: [{ type: String }],
-    title: { type: String },
-    description: { type: String },
-    stock: { type: Number },
-    longDescription: { type: String },
-    keywords: [{ type: String }],
-    features: [{ type: String }],
-    Active: { type: Boolean },
-    attributes: [
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    price: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    currency: {
+      type: String,
+      required: true,
+    },
+    discountPrice: {
+      type: Number,
+      min: 0,
+    },
+    description: {
+      type: String,
+      trim: true,
+    },
+    shortDescription: {
+      type: String,
+      trim: true,
+    },
+    images: [
       {
-        name: { type: String },
-        type: { type: String },
-        options: [{ type: String }],
-        defaultValue: mongoose.Schema.Types.Mixed,
-        priceMap: { type: Map, of: Number },
+        url: {
+          type: String,
+        },
+        isPrimary: {
+          type: Boolean,
+          default: false,
+        },
+      },
+    ],
+    stock: {
+      type: Number,
+    },
+    sizes: [
+      {
+        size: {
+          type: String,
+        },
+        stock: {
+          type: Number,
+        },
+        priceAdjustment: {
+          type: Number,
+          default: 0,
+        },
+      },
+    ],
+    sku: [
+      {
+        details: {
+          type: Map,
+          of: mongoose.Schema.Types.Mixed, 
+          default: {},
+        },
+      },
+    ],
+    category: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    subCategory: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    brand: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    features: [
+      {
+        type: String,
+        trim: true,
       },
     ],
     specifications: {
       type: Map,
-      of: mongoose.Schema.Types.Mixed,
+      of: String,
+      default: {},
+    },
+    weight: {
+      type: Number,
+      default: null,
+    },
+    dimensions: {
+      length: {
+        type: Number,
+        min: 0,
+      },
+      width: {
+        type: Number,
+        min: 0,
+      },
+      height: {
+        type: Number,
+        min: 0,
+      },
+    },
+    productDetail: [
+      {
+        details: {
+          type: Map,
+          of: mongoose.Schema.Types.Mixed,
+          default: {},
+        },
+      },
+    ],
+    tags: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
+    isActive: {
+      type: Boolean,
+      default: true,
     },
   },
   {
     timestamps: true,
-    toObject: {
-      transform: (doc, ret) => {
-        delete ret.Active;
-        return ret;
-      },
-    },
   }
 );
 
-ProductSchema.index({ product_name: 1, category: 1 }, { unique: true });
+ProductSchema.pre("save", function (next) {
+  this.updatedAt = Date.now();
+  next();
+});
 
-module.exports = mongoose.model("Product", ProductSchema);
+const Product = mongoose.model("Product", ProductSchema);
+
+module.exports = Product;

@@ -60,7 +60,7 @@ const TiffinMenuSchema = new mongoose.Schema(
     },
     Active: {
       type: Boolean,
-    },
+    }, 
   },
   {
     timestamps: true,

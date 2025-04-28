@@ -37,6 +37,6 @@ app.use("/api/v1/order", OrderRoute);
 app.use("/api/v1/tiffin-menu", TiffinMenuRoute);
 app.use("/api/v1/contact", ContactRoute);
 app.use("/api/v1/wishlist", WishlistRoute);
-app.use("/api/v1/count", CountRoute);
+app.use("/api/v1/C", CountRoute);
 
 module.exports = app;

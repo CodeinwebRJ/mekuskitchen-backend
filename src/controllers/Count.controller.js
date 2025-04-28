@@ -1,5 +1,7 @@
 const CartModel = require("../models/Cart.model");
 const WishlistModel = require("../models/Wishlist.model");
+const CategoryModel = require("../models/Category.model");
+const SubCategoryModel = require("../models/SubCategory.model");
 const ApiError = require("../utils/ApiError");
 const ApiResponse = require("../utils/ApiResponse");
 
@@ -40,6 +42,118 @@ const Counts = async (req, res) => {
   }
 };
 
+const CreateCategory = async (req, res) => {
+  try {
+    const { name, isActive } = req.body;
+
+    if (!name) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "Category name is required"));
+    }
+
+    const existingCategory = await CategoryModel.findOne({ name });
+    if (existingCategory) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "Category with this name already exists"));
+    }
+
+    const savedCategory = await CategoryModel.create({
+      name,
+      isActive: isActive !== undefined ? isActive : true,
+    });
+
+    return res
+      .status(201)
+      .json(
+        new ApiResponse(200, savedCategory, "Category created successfully")
+      );
+  } catch (error) {
+    console.error("Error creating category:", error);
+    return res.status(500).json(new ApiError(500, "Internal Server Error"));
+  }
+};
+
+const CreateSubCategory = async (req, res) => {
+  try {
+    const { name, isActive } = req.body;
+
+    if (!name) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "SubCategory name is required"));
+    }
+
+    const existingCategory = await SubCategoryModel.findOne({ name });
+    if (existingCategory) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "SubCategory with this name already exists"));
+    }
+
+    const savedCategory = await SubCategoryModel.create({
+      name,
+      isActive: isActive !== undefined ? isActive : true,
+    });
+
+    return res
+      .status(201)
+      .json(
+        new ApiResponse(200, savedCategory, "SubCategory created successfully")
+      );
+  } catch (error) {
+    console.error("Error creating category:", error);
+    return res.status(500).json(new ApiError(500, "Intenal Server Error"));
+  }
+};
+
+const getCategoryList = async (req, res) => {
+  try {
+    const categories = await CategoryModel.find({});
+
+    if (!categories || categories.length === 0) {
+      return res.status(404).json(new ApiError(404, "No categories found"));
+    }
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(200, categories, "Categories retrieved successfully")
+      );
+  } catch (error) {
+    console.error("Error in getCategoryList:", error);
+    return res.status(500).json(new ApiError(500, "Internal server error"));
+  }
+};
+
+const getSubCategoryList = async (req, res) => {
+  try {
+    const subCategories = await SubCategoryModel.find({});
+
+    if (!subCategories || subCategories.length === 0) {
+      return res.status(404).json(new ApiError(404, "No subCategories found"));
+    }
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          subCategories,
+          "SubCategories retrieved successfully"
+        )
+      );
+  } catch (error) {
+    console.error("Error in getCategoryList:", error);
+    return res.status(500).json(new ApiError(500, "Internal server error"));
+  }
+};
+
 module.exports = {
   Counts,
+  getCategoryList,
+  getSubCategoryList,
+  CreateCategory,
+  CreateSubCategory,
 };
