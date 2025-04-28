@@ -331,72 +331,64 @@ const getProductById = async (req, res) => {
 
 const RelatedProducts = async (req, res) => {
   try {
-    const { category } = req.query; // Using req.query for category
+    const { category } = req.query;
 
-    if (!category) {
-      return res.status(400).json(new ApiError(400, "Category is required"));
-    }
-
-    // Normalize category to lowercase for consistency
-    const normalizedCategory = category.toLowerCase();
-
-    // Check if category is "tiffin"
-    if (normalizedCategory === "tiffin") {
-      // Query for tiffins, ensuring the category is exactly "Tiffin" and Active is true
-      const tiffins = await TiffinModel.aggregate([
-        {
-          $match: {
-            category: "Tiffin", // Exact match for category
-            Active: true, // Only active tiffins
-          },
-        },
-        { $sample: { size: 5 } }, // Return 5 random tiffins
-      ]);
-
-      if (tiffins.length === 0) {
-        return res
-          .status(404)
-          .json(new ApiError(404, "No active tiffins found"));
-      }
-
+    if (!category || typeof category !== "string" || category.trim() === "") {
       return res
-        .status(200)
-        .json(
-          new ApiResponse(
-            200,
-            tiffins,
-            "Related tiffins retrieved successfully"
-          )
-        );
+        .status(400)
+        .json(new ApiError(400, "Valid category is required"));
     }
 
-    // Query for products in the given category
-    const products = await ProductModel.aggregate([
+    const normalizedCategory = category.trim().toLowerCase();
+
+    const isTiffinCategory = normalizedCategory === "tiffin";
+    const Model = isTiffinCategory ? TiffinModel : ProductModel;
+
+    const items = await Model.aggregate([
       {
         $match: {
-          category: { $regex: new RegExp(normalizedCategory, "i") }, // Case-insensitive match
-          Active: true, // Only active products
+          category: { $regex: new RegExp(`^${normalizedCategory}$`, "i") }, // Case-insensitive exact match
+          isActive: true,
         },
       },
-      { $sample: { size: 5 } }, // Return 5 random products
+      { $sample: { size: 5 } },
+      { $limit: 5 },
     ]);
 
-    if (products.length === 0) {
+    // Check if items were found
+    if (!items || items.length === 0) {
       return res
         .status(404)
-        .json(new ApiError(404, "No products found in this category"));
+        .json(
+          new ApiError(
+            404,
+            `No active ${
+              isTiffinCategory ? "tiffins" : "products"
+            } found for category "${category}"`
+          )
+        );
     }
 
     return res
       .status(200)
       .json(
-        new ApiResponse(200, products, "Random products retrieved successfully")
+        new ApiResponse(
+          200,
+          items,
+          `Related ${
+            isTiffinCategory ? "tiffins" : "products"
+          } retrieved successfully`
+        )
       );
   } catch (error) {
-    console.error("Error in RelatedProducts:", error);
+    console.error("Error in RelatedProducts:", {
+      error: error.message,
+      stack: error.stack,
+      category: req.query.category,
+    });
     return res
-      .status(500)
-      .json(new ApiError(500, "Internal server error", error.message));
+      .status(error.statusCode || 500)
+      .json(new ApiError(error.statusCode || 500, "Internal server error"));
   }
 };
 
