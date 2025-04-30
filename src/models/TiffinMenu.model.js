@@ -45,8 +45,13 @@ const TiffinMenuSchema = new mongoose.Schema(
     },
     image_url: [
       {
-        type: String,
-        required: true,
+        url: {
+          type: String,
+        },
+        isPrimary: {
+          type: Boolean,
+          default: false,
+        },
       },
     ],
     totalAmount: {
@@ -60,7 +65,7 @@ const TiffinMenuSchema = new mongoose.Schema(
     },
     Active: {
       type: Boolean,
-    }, 
+    },
   },
   {
     timestamps: true,

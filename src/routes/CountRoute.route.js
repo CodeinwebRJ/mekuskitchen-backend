@@ -11,7 +11,7 @@ const CountRoute = express.Router();
 CountRoute.get("/:id", Counts);
 CountRoute.post("/add/category", CreateCategory);
 CountRoute.post("/add/subCategory", CreateSubCategory);
-CountRoute.get("/category", getCategoryList);
-CountRoute.get("/subCategory", getSubCategoryList);
+CountRoute.get("/get/category", getCategoryList);
+CountRoute.get("/get/subCategory", getSubCategoryList);
 
 module.exports = CountRoute;

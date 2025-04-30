@@ -171,7 +171,6 @@ const updateAddress = async (req, res) => {
 
 const deleteAddress = async (req, res) => {
   try {
-    console.log("object");
     const { userId, addressId } = req.body;
 
     if (!userId || !addressId) {
@@ -184,8 +183,6 @@ const deleteAddress = async (req, res) => {
       _id: addressId,
       user: userId,
     });
-
-    console.log(address);
 
     if (!address) {
       return res

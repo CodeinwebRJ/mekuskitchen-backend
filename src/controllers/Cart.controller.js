@@ -261,13 +261,9 @@ const updateCart = async (req, res) => {
           .json(new ApiError(400, "Tiffin menu ID and day are required"));
       }
 
-      console.log(cart.tiffins);
-
       const tiffinIndex = cart.tiffins.findIndex(
         (t) => t.tiffinMenuId === tiffinMenuId && t.day === day
       );
-
-      console.log(tiffinIndex);
 
       if (tiffinIndex === -1) {
         return res

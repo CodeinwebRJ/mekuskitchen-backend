@@ -80,28 +80,26 @@ const removeItems = async (req, res) => {
         .json(new ApiError(400, "User ID and Product ID are required"));
     }
 
-    const wishlist = await WishlistModel.findOneAndUpdate(
-      { userid },
-      {
-        $pull: { items: { productId: product_id } },
-      },
-      { new: true }
-    ).populate("items.productId");
-
-    console.log(wishlist);
+    // Check if the product exists in the wishlist first
+    const wishlist = await WishlistModel.findOne({ userid });
 
     if (!wishlist) {
       return res.status(404).json(new ApiError(404, "Wishlist not found"));
     }
 
-    const itemExists = wishlist.items.some(
+    const itemIndex = wishlist.items.findIndex(
       (item) => item.productId.toString() === product_id.toString()
     );
-    if (itemExists) {
+
+    if (itemIndex === -1) {
       return res
         .status(404)
         .json(new ApiError(404, "Product not found in wishlist"));
     }
+
+    // Remove the item manually
+    wishlist.items.splice(itemIndex, 1);
+    await wishlist.save();
 
     return res
       .status(200)
@@ -111,6 +109,7 @@ const removeItems = async (req, res) => {
     return res.status(500).json(new ApiError(500, "Internal Server Error"));
   }
 };
+
 module.exports = {
   getUserWishlist,
   addToWishlist,
