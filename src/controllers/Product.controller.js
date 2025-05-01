@@ -1,4 +1,3 @@
-const { model } = require("mongoose");
 const ProductModel = require("../models/Product.model");
 const TiffinModel = require("../models/TiffinMenu.model");
 const ApiError = require("../utils/ApiError");
@@ -10,7 +9,6 @@ const getAllProducts = async (req, res) => {
   try {
     const { page, limit, search, sortBy, category } = req.body;
 
-    // Validate pagination params
     if (!page || !limit) {
       return res
         .status(400)
@@ -19,82 +17,81 @@ const getAllProducts = async (req, res) => {
 
     const skip = (page - 1) * limit;
 
-    // Build the query object
     let query = {};
     if (search) {
-      query.name = { $regex: search, $options: "i" }; // Match 'name' based on search
+      query.name = { $regex: search, $options: "i" };
     }
     if (category) {
-      query.category = { $regex: category, $options: "i" }; // Match category if provided
+      query.category = { $regex: category, $options: "i" };
     }
 
     let pipeline = [
       { $match: query },
       {
+        $addFields: {
+          productIdStr: { $toString: "$_id" },
+        },
+      },
+      {
         $lookup: {
           from: "reviews",
-          localField: "_id",
+          localField: "productIdStr",
           foreignField: "product_id",
           as: "reviews",
         },
       },
       {
         $addFields: {
-          averageRating: { $avg: "$reviews.rating" },
-          latestReview: { $max: "$reviews.createdAt" },
+          averageRating: {
+            $cond: {
+              if: { $gt: [{ $size: "$reviews" }, 0] },
+              then: { $avg: "$reviews.rating" },
+              else: 0,
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          productIdStr: 0,
+          __v: 0,
+          reviews: 0,
         },
       },
     ];
 
-    // Handle sorting logic
     let sortStage = {};
     if (sortBy) {
       switch (sortBy.toLowerCase()) {
         case "high-to-low":
-          sortStage = { price: -1 };
+          sortStage = { price: 1 };
           break;
         case "low-to-high":
-          sortStage = { price: 1 };
+          sortStage = { price: -1 };
           break;
         case "sortbyaverageratings":
           sortStage = { averageRating: -1 };
           break;
         case "sortbylatest":
-          sortStage = { createdAt: -1 };
+          sortStage = { latestReview: -1 };
           break;
         default:
           sortStage = { createdAt: -1 };
       }
     }
 
-    // Add sorting stage to the pipeline
     if (Object.keys(sortStage).length > 0) {
       pipeline.push({ $sort: sortStage });
     }
 
-    // Add pagination
-    pipeline.push(
-      { $skip: skip },
-      { $limit: parseInt(limit) }, // Convert limit to an integer
-      {
-        $project: {
-          __v: 0,
-          "reviews._id": 0, // Exclude review IDs from the response
-        },
-      }
-    );
+    pipeline.push({ $skip: skip }, { $limit: parseInt(limit) });
 
-    // Execute aggregation pipeline
     const products = await ProductModel.aggregate(pipeline).exec();
-
-    // Get total product count
     const totalProducts = await ProductModel.countDocuments(query);
 
     if (!products || products.length === 0) {
       return res.status(404).json(new ApiError(404, "No products found"));
     }
-
-    // Prepare response data with pagination info
     const resData = {
       success: true,
       total: totalProducts,
@@ -102,7 +99,6 @@ const getAllProducts = async (req, res) => {
       pages: Math.ceil(totalProducts / limit),
       data: products,
     };
-
     res
       .status(200)
       .json(new ApiResponse(200, resData, "Fetched Data Successfully"));
@@ -114,6 +110,7 @@ const getAllProducts = async (req, res) => {
   }
 };
 
+// Todo : Image Upload Flow
 const CreateProduct = async (req, res) => {
   try {
     const {

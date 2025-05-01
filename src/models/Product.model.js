@@ -12,6 +12,10 @@ const ProductSchema = mongoose.Schema(
       required: true,
       min: 0,
     },
+    sellingPrice: {
+      type: Number,
+      min: 0,
+    },
     currency: {
       type: String,
       required: true,
@@ -60,7 +64,7 @@ const ProductSchema = mongoose.Schema(
       {
         details: {
           type: Map,
-          of: mongoose.Schema.Types.Mixed, 
+          of: mongoose.Schema.Types.Mixed,
           default: {},
         },
       },
