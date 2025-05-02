@@ -200,7 +200,7 @@ const CreateProduct = async (req, res) => {
         );
     }
 
-    let skuArray = JSON.parse(sku);
+    let skuArray = safeParseJSON(sku, "sku");
     if (!Array.isArray(skuArray)) {
       return res.status(400).json(new ApiError(400, "SKU must be an array"));
     }
@@ -281,7 +281,7 @@ const CreateProduct = async (req, res) => {
       }
     }
 
-    const productDetailArray = JSON.parse(productDetail);
+    const productDetailArray = safeParseJSON(productDetail, "productDetail");
     const validatedProductDetail = productDetailArray?.map((detail) => {
       return { ...detail };
     });
@@ -302,7 +302,7 @@ const CreateProduct = async (req, res) => {
       subCategory: subCategory || null,
       brand: brand || null,
       features: features || [],
-      specifications: JSON.parse(specifications) || {},
+      specifications: safeParseJSON(specifications, "specifications") || {},
       weight: weight || null,
       dimensions: dimensions || {},
       productDetail: validatedProductDetail || [],
@@ -382,9 +382,8 @@ const RelatedProducts = async (req, res) => {
       const tiffins = await TiffinModel.aggregate([
         {
           $match: {
-            category: { $in: ["tiffin"] },
-            category: { $in: ["Tiffin"] },
-            Active: true,
+            category: { $regex: /^tiffin$/i },
+            isActive: true,
           },
         },
         { $sample: { size: 5 } },
@@ -408,7 +407,12 @@ const RelatedProducts = async (req, res) => {
     }
 
     const products = await ProductModel.aggregate([
-      { $match: { category: category } },
+      {
+        $match: {
+          category: { $regex: new RegExp(`^${category}$`, "i") },
+          isActive: true,
+        },
+      },
       { $sample: { size: 5 } },
     ]);
 
@@ -421,7 +425,11 @@ const RelatedProducts = async (req, res) => {
     return res
       .status(200)
       .json(
-        new ApiResponse(200, products, "Random products retrieved successfully")
+        new ApiResponse(
+          200,
+          products,
+          "Related products retrieved successfully"
+        )
       );
   } catch (error) {
     console.error("Error in RelatedProducts:", error);
@@ -459,6 +467,13 @@ const EditProduct = async (req, res) => {
 
     if (!id) {
       return res.status(400).json(new ApiError(400, "Product ID is required"));
+    }
+
+    const existingName = await ProductModel.findOne({ name: name.trim() });
+    if (existingName) {
+      return res
+        .status(409)
+        .json(new ApiError(409, "A product with this name already exists"));
     }
 
     const imageFiles = req.files?.productImages || [];
@@ -694,7 +709,7 @@ const EditProduct = async (req, res) => {
       );
   } finally {
     if (req.files && Array.isArray(req.files)) {
-      console.log(req.files)
+      console.log(req.files);
       await Promise.all(
         req.files.map(async (file) => {
           try {
