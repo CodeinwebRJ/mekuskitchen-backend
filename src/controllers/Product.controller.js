@@ -1,9 +1,17 @@
+const ApiResponse = require("../utils/ApiResponse");
+const ApiError = require("../utils/ApiError");
 const ProductModel = require("../models/Product.model");
 const TiffinModel = require("../models/TiffinMenu.model");
-const ApiError = require("../utils/ApiError");
-const ApiResponse = require("../utils/ApiResponse");
 const { uploadToCloudinary } = require("../utils/Cloudinary.utils");
 const fs = require("fs");
+
+const safeParseJSON = (data, fieldName) => {
+  try {
+    return typeof data === "string" ? JSON.parse(data) : data;
+  } catch {
+    throw new ApiError(400, `Invalid JSON for ${fieldName}`);
+  }
+};
 
 const getAllProducts = async (req, res) => {
   try {
@@ -110,7 +118,6 @@ const getAllProducts = async (req, res) => {
   }
 };
 
-// Todo : Image Upload Flow
 const CreateProduct = async (req, res) => {
   try {
     const {
@@ -118,7 +125,7 @@ const CreateProduct = async (req, res) => {
       sku,
       price,
       currency,
-      discountPrice,
+      sellingPrice,
       description,
       shortDescription,
       stock,
@@ -135,12 +142,42 @@ const CreateProduct = async (req, res) => {
       tags,
     } = req.body;
 
-    // const imageFiles = req.files?.productImages || [];
-    // const skuImageFiles = req.files?.skuImages || [];
+    const existingName = await ProductModel.findOne({ name: name.trim() });
+    if (existingName) {
+      return res
+        .status(409)
+        .json(new ApiError(409, "A product with this name already exists"));
+    }
 
-    // console.log(imageFiles, skuImageFiles);
+    const imageFiles = req.files?.productImages || [];
+    const skuImages = req.files?.skuImages || [];
 
-    // Validate required fields (based on schema)
+    if (!imageFiles || !Array.isArray(imageFiles) || imageFiles.length === 0) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "At least one image file is required"));
+    }
+
+    const uploadPromises = imageFiles.map((file) =>
+      uploadToCloudinary(file.path)
+    );
+    const uploadResults = await Promise.all(uploadPromises);
+
+    const uploadedProductImages = uploadResults.map((result, index) => ({
+      url: result.secure_url,
+      isPrimary: index === 0,
+    }));
+
+    if (
+      !uploadedProductImages.every(
+        (img) => typeof img.url === "string" && img.url.trim() !== ""
+      )
+    ) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "All uploaded images must have valid URLs"));
+    }
+
     if (!name || !price || !currency) {
       return res
         .status(400)
@@ -149,13 +186,13 @@ const CreateProduct = async (req, res) => {
         );
     }
 
-    // Validate price and discountPrice
-    if (price < 0 || (discountPrice && discountPrice < 0)) {
+    if (price < 0 || (sellingPrice && sellingPrice < 0)) {
       return res
         .status(400)
-        .json(new ApiError(400, "Price and discountPrice cannot be negative"));
+        .json(new ApiError(400, "Price and sellingPrice cannot be negative"));
     }
-    if (discountPrice && discountPrice >= price) {
+
+    if (sellingPrice && sellingPrice >= price) {
       return res
         .status(400)
         .json(
@@ -163,61 +200,50 @@ const CreateProduct = async (req, res) => {
         );
     }
 
-    // Validate and process SKU
-    let processedSkus = [];
-    if (sku && Array.isArray(sku)) {
-      const skuCodes = sku.map((item) => item.code);
-      const existingProduct = await ProductModel.findOne({
-        "sku.code": { $in: skuCodes },
-      });
-      if (existingProduct) {
-        return res
-          .status(409)
-          .json(
-            new ApiError(
-              409,
-              "A product with one of these SKU codes already exists"
-            )
-          );
-      }
-
-      // Process each SKU
-      processedSkus = await Promise.all(
-        sku.map(async (skuItem, index) => {
-          const { details } = skuItem;
-
-          let processedDetails = { ...details };
-          if (details.images && Array.isArray(details.images)) {
-            const imageIndices = details.images.filter(
-              (i) => i >= 0 && i < skuImageFiles.length
-            );
-            if (imageIndices.length === 0 && details.images.length > 0) {
-              throw new ApiError(
-                400,
-                `No valid images provided for SKU ${skuItem.code}`
-              );
-            }
-
-            // Upload the images associated with the SKU
-            const uploadPromises = imageIndices.map(async (i, idx) => {
-              const result = await uploadToCloudinary(skuImageFiles[i].path);
-              return {
-                url: result.secure_url,
-                isPrimary: idx === 0, // Set the first image as primary
-              };
-            });
-            processedDetails.images = await Promise.all(uploadPromises);
-          }
-
-          return {
-            code: skuItem.code,
-            details: processedDetails,
-          };
-        })
-      );
+    let skuArray = JSON.parse(sku);
+    if (!Array.isArray(skuArray)) {
+      return res.status(400).json(new ApiError(400, "SKU must be an array"));
     }
 
-    // Validate sizes
+    const skuCodes = skuArray.map((item) => item.code);
+    const existingProduct = await ProductModel.findOne({
+      "sku.code": { $in: skuCodes },
+    });
+
+    if (existingProduct) {
+      return res
+        .status(409)
+        .json(
+          new ApiError(
+            409,
+            "A product with one of these SKU codes already exists"
+          )
+        );
+    }
+
+    const processedSkus = await Promise.all(
+      skuArray.map(async (skuItem, index) => {
+        const { details } = skuItem;
+        let processedDetails = { ...details };
+        if (skuImages) {
+          const uploadResults = await Promise.all(
+            skuImages.map((imgFile) => uploadToCloudinary(imgFile.path))
+          );
+          processedDetails.images = uploadResults.map((result, i) => ({
+            url: result.secure_url,
+            isPrimary: i === 0,
+          }));
+        } else {
+          processedDetails.images = [];
+        }
+
+        return {
+          code: skuItem.code,
+          details: processedDetails,
+        };
+      })
+    );
+
     if (sizes && Array.isArray(sizes)) {
       for (const size of sizes) {
         if (
@@ -243,15 +269,32 @@ const CreateProduct = async (req, res) => {
       }
     }
 
+    if (dimensions) {
+      if (
+        (dimensions.length && dimensions.length < 0) ||
+        (dimensions.width && dimensions.width < 0) ||
+        (dimensions.height && dimensions.height < 0)
+      ) {
+        return res
+          .status(400)
+          .json(new ApiError(400, "Dimensions cannot be negative"));
+      }
+    }
+
+    const productDetailArray = JSON.parse(productDetail);
+    const validatedProductDetail = productDetailArray?.map((detail) => {
+      return { ...detail };
+    });
+
     const newProduct = await ProductModel.create({
       name,
       sku: processedSkus,
       price,
       currency,
-      discountPrice: discountPrice || null,
+      sellingPrice: sellingPrice || null,
       description: description || null,
       shortDescription: shortDescription || null,
-      // images: uploadedProductImages,
+      images: uploadedProductImages,
       stock: stock || 0,
       sizes: sizes || [],
       dietaryPreference: dietaryPreference || null,
@@ -259,10 +302,10 @@ const CreateProduct = async (req, res) => {
       subCategory: subCategory || null,
       brand: brand || null,
       features: features || [],
-      specifications: specifications || {},
+      specifications: JSON.parse(specifications) || {},
       weight: weight || null,
       dimensions: dimensions || {},
-      productDetail: productDetail || [],
+      productDetail: validatedProductDetail || [],
       tags: tags || [],
       isActive: true,
     });
@@ -388,99 +431,242 @@ const RelatedProducts = async (req, res) => {
   }
 };
 
-// TODO : change Image Upload Flow add File formate.
 const EditProduct = async (req, res) => {
   try {
     const { id } = req.params;
     const {
-      product_name,
-      category,
-      subCategory,
+      name,
       price,
-      stock,
-      title,
+      currency,
+      sellingPrice,
       description,
-      longDescription,
-      keywords,
-      features,
-      ingredients,
-      nutritionalInfo,
-      allergens,
+      shortDescription,
+      stock,
       sizes,
       dietaryPreference,
-      cuisine,
+      category,
+      subCategory,
       brand,
+      sku,
+      features,
       specifications,
       weight,
       dimensions,
-      shippingDetails,
+      productDetail,
       tags,
-      Active,
+      isActive,
     } = req.body;
 
-    // Check if product ID is provided
     if (!id) {
       return res.status(400).json(new ApiError(400, "Product ID is required"));
     }
 
-    const updateData = {};
+    const imageFiles = req.files?.productImages || [];
+    const skuImages = req.files?.skuImages || [];
+    const MAX_IMAGES = 10;
 
-    // Fields mapping from request body
-    const fields = {
-      product_name,
-      category,
-      subCategory,
-      price,
-      stock,
-      title,
-      description,
-      longDescription,
-      keywords,
-      features,
-      ingredients,
-      nutritionalInfo,
-      allergens,
-      sizes,
-      dietaryPreference,
-      cuisine,
-      brand,
-      specifications,
-      weight,
-      dimensions,
-      shippingDetails,
-      tags,
-      Active,
-    };
-
-    // Update only the fields that are provided
-    Object.keys(fields).forEach((key) => {
-      if (fields[key] !== undefined) {
-        updateData[key] = fields[key];
-      }
-    });
-
-    // Handle image updates if files are uploaded
-    if (req.files && req.files.length > 0) {
-      const uploadPromises = req.files.map((file) =>
-        uploadToCloudinary(file.path)
-      ); // Assuming this function uploads to Cloudinary
-      const uploadResults = await Promise.all(uploadPromises);
-      const image_urls = uploadResults.map((result) => ({
-        url: result.secure_url,
-        altText: result.original_filename,
-        isPrimary: false, // Set default isPrimary to false, can be updated later
-      }));
-      updateData.images = image_urls; // Update product with new images
-    }
-
-    // If no fields are provided for update, return error
-    if (Object.keys(updateData).length === 0) {
+    if (imageFiles.length > MAX_IMAGES) {
       return res
         .status(400)
-        .json(new ApiError(400, "No valid fields provided for update"));
+        .json(new ApiError(400, `Maximum ${MAX_IMAGES} images allowed`));
     }
 
-    // Update the product in the database
+    const updateData = {};
+    if (name) updateData.name = name.trim();
+
+    if (price !== undefined) {
+      if (price < 0) {
+        return res
+          .status(400)
+          .json(new ApiError(400, "Price cannot be negative"));
+      }
+      updateData.price = price;
+    }
+
+    if (sellingPrice !== undefined) {
+      if (sellingPrice < 0 || (price !== undefined && sellingPrice >= price)) {
+        return res
+          .status(400)
+          .json(
+            new ApiError(
+              400,
+              "Discount price must be positive and less than regular price"
+            )
+          );
+      }
+      updateData.sellingPrice = sellingPrice;
+    }
+
+    if (currency) updateData.currency = currency;
+    if (description) updateData.description = description;
+    if (shortDescription) updateData.shortDescription = shortDescription;
+    if (stock !== undefined) {
+      if (stock < 0) {
+        return res
+          .status(400)
+          .json(new ApiError(400, "Stock cannot be negative"));
+      }
+      updateData.stock = stock;
+    }
+    if (dietaryPreference) updateData.dietaryPreference = dietaryPreference;
+    if (category) updateData.category = category;
+    if (subCategory) updateData.subCategory = subCategory;
+    if (brand) updateData.brand = brand;
+    if (features) updateData.features = features;
+    if (tags) updateData.tags = tags.map((tag) => tag.trim());
+    if (isActive !== undefined) updateData.isActive = isActive;
+
+    if (specifications) {
+      const parsedSpecifications = safeParseJSON(
+        specifications,
+        "specifications"
+      );
+      if (
+        typeof parsedSpecifications !== "object" ||
+        Array.isArray(parsedSpecifications)
+      ) {
+        return res
+          .status(400)
+          .json(new ApiError(400, "Specifications must be an object"));
+      }
+      updateData.specifications = parsedSpecifications;
+    }
+
+    if (productDetail) {
+      const parsedProductDetail = safeParseJSON(productDetail, "productDetail");
+      if (!Array.isArray(parsedProductDetail)) {
+        return res
+          .status(400)
+          .json(new ApiError(400, "productDetail must be an array"));
+      }
+      updateData.productDetail = parsedProductDetail;
+    }
+
+    if (sizes) {
+      const parsedSizes = safeParseJSON(sizes, "sizes");
+      if (!Array.isArray(parsedSizes)) {
+        return res
+          .status(400)
+          .json(new ApiError(400, "Sizes must be an array"));
+      }
+      for (const size of parsedSizes) {
+        if (
+          size.stock < 0 ||
+          (size.priceAdjustment && typeof size.priceAdjustment !== "number")
+        ) {
+          return res
+            .status(400)
+            .json(new ApiError(400, "Invalid size stock or price adjustment"));
+        }
+      }
+      updateData.sizes = parsedSizes;
+    }
+
+    if (dimensions) {
+      const parsedDimensions = safeParseJSON(dimensions, "dimensions");
+      if (
+        (parsedDimensions.length && parsedDimensions.length < 0) ||
+        (parsedDimensions.width && parsedDimensions.width < 0) ||
+        (parsedDimensions.height && parsedDimensions.height < 0)
+      ) {
+        return res
+          .status(400)
+          .json(new ApiError(400, "Dimensions cannot be negative"));
+      }
+      updateData.dimensions = parsedDimensions;
+    }
+
+    if (weight !== undefined) {
+      if (weight < 0) {
+        return res
+          .status(400)
+          .json(new ApiError(400, "Weight cannot be negative"));
+      }
+      updateData.weight = weight;
+    }
+
+    if (imageFiles.length > 0) {
+      const uploadPromises = imageFiles.map((file) =>
+        uploadToCloudinary(file.path)
+      );
+      const uploadResults = await Promise.all(uploadPromises);
+      const imageUrls = uploadResults.map((result, index) => ({
+        url: result.secure_url,
+        isPrimary: index === 0,
+      }));
+      if (
+        !imageUrls.every(
+          (img) => typeof img.url === "string" && img.url.trim() !== ""
+        )
+      ) {
+        return res
+          .status(400)
+          .json(new ApiError(400, "All uploaded images must have valid URLs"));
+      }
+      updateData.images = imageUrls;
+    }
+
+    if (sku) {
+      const updatedSkuArray = safeParseJSON(sku, "sku");
+      if (!Array.isArray(updatedSkuArray)) {
+        return res.status(400).json(new ApiError(400, "SKU must be an array"));
+      }
+
+      const skuCodes = updatedSkuArray.map((item) => item.code);
+      const existingProduct = await ProductModel.findOne({
+        "sku.code": { $in: skuCodes },
+        _id: { $ne: id },
+      });
+      if (existingProduct) {
+        return res
+          .status(409)
+          .json(
+            new ApiError(
+              409,
+              "A product with one of these SKU codes already exists"
+            )
+          );
+      }
+
+      const MAX_IMAGES_PER_SKU = 5;
+      const uploadedSkuArray = await Promise.all(
+        updatedSkuArray.map(async (skuItem, index) => {
+          try {
+            const { details } = skuItem;
+            let processedDetails = { ...details };
+
+            if (skuImages.length > MAX_IMAGES_PER_SKU) {
+              throw new ApiError(
+                400,
+                `Maximum ${MAX_IMAGES_PER_SKU} images allowed per SKU`
+              );
+            }
+
+            if (skuImages.length > 0) {
+              const uploadResults = await Promise.all(
+                skuImages.map((file) => uploadToCloudinary(file.path))
+              );
+
+              processedDetails.images = uploadResults.map((result, i) => ({
+                url: result.secure_url,
+                isPrimary: i === 0,
+              }));
+            } else {
+              processedDetails.images = processedDetails.images || [];
+            }
+
+            return {
+              details: processedDetails,
+            };
+          } catch (error) {
+            return { error, code: skuItem.code };
+          }
+        })
+      );
+
+      updateData.sku = uploadedSkuArray;
+    }
+
     const updatedProduct = await ProductModel.findByIdAndUpdate(
       id,
       { $set: updateData },
@@ -498,7 +684,34 @@ const EditProduct = async (req, res) => {
       );
   } catch (error) {
     console.error("Error updating product:", error);
-    return res.status(500).json(new ApiError(500, "Internal server error"));
+    return res
+      .status(error.statusCode || 500)
+      .json(
+        new ApiError(
+          error.statusCode || 500,
+          error.message || "Internal server error"
+        )
+      );
+  } finally {
+    if (req.files && Array.isArray(req.files)) {
+      console.log(req.files)
+      await Promise.all(
+        req.files.map(async (file) => {
+          try {
+            if (
+              await fs
+                .access(file.path)
+                .then(() => true)
+                .catch(() => false)
+            ) {
+              fs.unlink(file.path);
+            }
+          } catch (error) {
+            console.error(`Error removing file ${file.path}:`, error);
+          }
+        })
+      );
+    }
   }
 };
 

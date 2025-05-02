@@ -18,6 +18,10 @@ ProductRoute.post(
 );
 ProductRoute.post("/:id", getProductById);
 ProductRoute.post("/category/related", RelatedProducts);
-ProductRoute.put("/category/:id", EditProduct);
+ProductRoute.put(
+  "/category/:id",
+  upload.fields([{ name: "productImages" }, { name: "skuImages" }]),
+  EditProduct
+);
 
 module.exports = ProductRoute;

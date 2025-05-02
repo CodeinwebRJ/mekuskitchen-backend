@@ -20,10 +20,6 @@ const ProductSchema = mongoose.Schema(
       type: String,
       required: true,
     },
-    discountPrice: {
-      type: Number,
-      min: 0,
-    },
     description: {
       type: String,
       trim: true,
@@ -46,20 +42,6 @@ const ProductSchema = mongoose.Schema(
     stock: {
       type: Number,
     },
-    sizes: [
-      {
-        size: {
-          type: String,
-        },
-        stock: {
-          type: Number,
-        },
-        priceAdjustment: {
-          type: Number,
-          default: 0,
-        },
-      },
-    ],
     sku: [
       {
         details: {
