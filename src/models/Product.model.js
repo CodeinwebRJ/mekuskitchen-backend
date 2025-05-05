@@ -56,11 +56,6 @@ const ProductSchema = mongoose.Schema(
       trim: true,
       default: null,
     },
-    subCategory: {
-      type: String,
-      trim: true,
-      default: null,
-    },
     brand: {
       type: String,
       trim: true,
@@ -81,6 +76,10 @@ const ProductSchema = mongoose.Schema(
       type: Number,
       default: null,
     },
+    weightUnit: {
+      type: String,
+      default: null,
+    },
     dimensions: {
       length: {
         type: Number,
@@ -93,6 +92,9 @@ const ProductSchema = mongoose.Schema(
       height: {
         type: Number,
         min: 0,
+      },
+      dimensionUnit: {
+        type: String,
       },
     },
     productDetail: [

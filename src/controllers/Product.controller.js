@@ -132,11 +132,11 @@ const CreateProduct = async (req, res) => {
       sizes,
       dietaryPreference,
       category,
-      subCategory,
       brand,
       features,
       specifications,
       weight,
+      weightUnit,
       dimensions,
       productDetail,
       tags,
@@ -185,14 +185,12 @@ const CreateProduct = async (req, res) => {
           new ApiError(400, "Product name, price, and currency are required")
         );
     }
-
-    if (price < 0 || (sellingPrice && sellingPrice < 0)) {
+    if (price < 0) {
       return res
         .status(400)
         .json(new ApiError(400, "Price and sellingPrice cannot be negative"));
     }
-
-    if (sellingPrice && sellingPrice >= price) {
+    if (sellingPrice) {
       return res
         .status(400)
         .json(
@@ -261,19 +259,8 @@ const CreateProduct = async (req, res) => {
       if (
         (dimensions.length && dimensions.length < 0) ||
         (dimensions.width && dimensions.width < 0) ||
-        (dimensions.height && dimensions.height < 0)
-      ) {
-        return res
-          .status(400)
-          .json(new ApiError(400, "Dimensions cannot be negative"));
-      }
-    }
-
-    if (dimensions) {
-      if (
-        (dimensions.length && dimensions.length < 0) ||
-        (dimensions.width && dimensions.width < 0) ||
-        (dimensions.height && dimensions.height < 0)
+        (dimensions.height && dimensions.height < 0) ||
+        dimensions.dimensionUnit
       ) {
         return res
           .status(400)
@@ -299,11 +286,11 @@ const CreateProduct = async (req, res) => {
       sizes: sizes || [],
       dietaryPreference: dietaryPreference || null,
       category: category || null,
-      subCategory: subCategory || null,
       brand: brand || null,
       features: features || [],
       specifications: safeParseJSON(specifications, "specifications") || {},
       weight: weight || null,
+      weightUnit: weightUnit || null,
       dimensions: dimensions || {},
       productDetail: validatedProductDetail || [],
       tags: tags || [],
@@ -453,12 +440,12 @@ const EditProduct = async (req, res) => {
       sizes,
       dietaryPreference,
       category,
-      subCategory,
       brand,
       sku,
       features,
       specifications,
       weight,
+      weightUnit,
       dimensions,
       productDetail,
       tags,
@@ -525,7 +512,6 @@ const EditProduct = async (req, res) => {
     }
     if (dietaryPreference) updateData.dietaryPreference = dietaryPreference;
     if (category) updateData.category = category;
-    if (subCategory) updateData.subCategory = subCategory;
     if (brand) updateData.brand = brand;
     if (features) updateData.features = features;
     if (tags) updateData.tags = tags.map((tag) => tag.trim());
@@ -582,13 +568,22 @@ const EditProduct = async (req, res) => {
       if (
         (parsedDimensions.length && parsedDimensions.length < 0) ||
         (parsedDimensions.width && parsedDimensions.width < 0) ||
-        (parsedDimensions.height && parsedDimensions.height < 0)
+        (parsedDimensions.height && parsedDimensions.height < 0) ||
+        parsedDimensions.dimensionUnit
       ) {
         return res
           .status(400)
           .json(new ApiError(400, "Dimensions cannot be negative"));
       }
       updateData.dimensions = parsedDimensions;
+    }
+
+    if (weightUnit !== undefined) {
+      const allowedUnits = ["kg", "g", "lb", "oz"];
+      if (!allowedUnits.includes(weightUnit)) {
+        return res.status(400).json(new ApiError(400, "Invalid weight unit"));
+      }
+      updateData.weightUnit = weightUnit;
     }
 
     if (weight !== undefined) {
