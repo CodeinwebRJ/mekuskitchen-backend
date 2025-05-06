@@ -1,8 +1,10 @@
+const { uploadToCloudinary } = require("../utils/Cloudinary.utils");
 const CartModel = require("../models/Cart.model");
 const WishlistModel = require("../models/Wishlist.model");
 const CategoryModel = require("../models/Category.model");
 const ApiError = require("../utils/ApiError");
 const ApiResponse = require("../utils/ApiResponse");
+const fs = require("fs").promises;
 
 const Counts = async (req, res) => {
   try {
@@ -174,10 +176,83 @@ const getSubCategoryList = async (req, res) => {
   }
 };
 
+const UploadImages = async (req, res) => {
+  try {
+    console.log(req.files);
+    const imageFiles = req.files || [];
+
+    if (!imageFiles) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "At least one image file is required"));
+    }
+
+    const uploadPromises = imageFiles.map((file) =>
+      uploadToCloudinary(file.path)
+    );
+    const uploadResults = await Promise.all(uploadPromises);
+
+    const uploadedImages = uploadResults.map((result, index) => ({
+      url: result.secure_url,
+      isPrimary: index === 0,
+    }));
+
+    if (
+      !uploadedImages.every(
+        (img) => typeof img.url === "string" && img.url.trim() !== ""
+      )
+    ) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "All uploaded images must have valid URLs"));
+    }
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          { images: uploadedImages },
+          "Images uploaded successfully"
+        )
+      );
+  } catch (error) {
+    console.error("Error uploading images:", error);
+    return res
+      .status(error.statusCode || 500)
+      .json(
+        new ApiError(
+          error.statusCode || 500,
+          error.message || "Internal server error"
+        )
+      );
+  } finally {
+    if (req.files?.images && Array.isArray(req.files.images)) {
+      await Promise.all(
+        req.files.images.map(async (file) => {
+          try {
+            if (
+              await fs
+                .access(file.path)
+                .then(() => true)
+                .catch(() => false)
+            ) {
+              await fs.unlink(file.path);
+            }
+          } catch (error) {
+            console.error(`Error removing file ${file.path}:`, error);
+          }
+        })
+      );
+    }
+  }
+};
+
 module.exports = {
   Counts,
   getCategoryList,
   getSubCategoryList,
   CreateCategory,
   CreateSubCategory,
+  UploadImages,
 };

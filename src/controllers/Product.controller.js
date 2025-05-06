@@ -124,7 +124,6 @@ const CreateProduct = async (req, res) => {
       name,
       sku,
       price,
-      currency,
       sellingPrice,
       description,
       shortDescription,
@@ -140,42 +139,17 @@ const CreateProduct = async (req, res) => {
       dimensions,
       productDetail,
       tags,
+      images,
+      currency,
     } = req.body;
+
+    console.log(req.body);
 
     const existingName = await ProductModel.findOne({ name: name.trim() });
     if (existingName) {
       return res
         .status(409)
         .json(new ApiError(409, "A product with this name already exists"));
-    }
-
-    const imageFiles = req.files?.productImages || [];
-    const skuImages = req.files?.skuImages || [];
-
-    if (!imageFiles || !Array.isArray(imageFiles) || imageFiles.length === 0) {
-      return res
-        .status(400)
-        .json(new ApiError(400, "At least one image file is required"));
-    }
-
-    const uploadPromises = imageFiles.map((file) =>
-      uploadToCloudinary(file.path)
-    );
-    const uploadResults = await Promise.all(uploadPromises);
-
-    const uploadedProductImages = uploadResults.map((result, index) => ({
-      url: result.secure_url,
-      isPrimary: index === 0,
-    }));
-
-    if (
-      !uploadedProductImages.every(
-        (img) => typeof img.url === "string" && img.url.trim() !== ""
-      )
-    ) {
-      return res
-        .status(400)
-        .json(new ApiError(400, "All uploaded images must have valid URLs"));
     }
 
     if (!name || !price || !currency) {
@@ -190,7 +164,7 @@ const CreateProduct = async (req, res) => {
         .status(400)
         .json(new ApiError(400, "Price and sellingPrice cannot be negative"));
     }
-    if (sellingPrice) {
+    if (price < sellingPrice) {
       return res
         .status(400)
         .json(
@@ -199,11 +173,12 @@ const CreateProduct = async (req, res) => {
     }
 
     let skuArray = safeParseJSON(sku, "sku");
+
     if (!Array.isArray(skuArray)) {
       return res.status(400).json(new ApiError(400, "SKU must be an array"));
     }
 
-    const skuCodes = skuArray.map((item) => item.code);
+    const skuCodes = skuArray.map((item) => item.SKUName);
     const existingProduct = await ProductModel.findOne({
       "sku.code": { $in: skuCodes },
     });
@@ -219,28 +194,9 @@ const CreateProduct = async (req, res) => {
         );
     }
 
-    const processedSkus = await Promise.all(
-      skuArray.map(async (skuItem, index) => {
-        const { details } = skuItem;
-        let processedDetails = { ...details };
-        if (skuImages) {
-          const uploadResults = await Promise.all(
-            skuImages.map((imgFile) => uploadToCloudinary(imgFile.path))
-          );
-          processedDetails.images = uploadResults.map((result, i) => ({
-            url: result.secure_url,
-            isPrimary: i === 0,
-          }));
-        } else {
-          processedDetails.images = [];
-        }
-
-        return {
-          code: skuItem.code,
-          details: processedDetails,
-        };
-      })
-    );
+    const processedSkus = skuArray.map((skuItem) => ({
+      details: skuItem || {},
+    }));
 
     if (sizes && Array.isArray(sizes)) {
       for (const size of sizes) {
@@ -259,8 +215,7 @@ const CreateProduct = async (req, res) => {
       if (
         (dimensions.length && dimensions.length < 0) ||
         (dimensions.width && dimensions.width < 0) ||
-        (dimensions.height && dimensions.height < 0) ||
-        dimensions.dimensionUnit
+        (dimensions.height && dimensions.height < 0)
       ) {
         return res
           .status(400)
@@ -278,10 +233,10 @@ const CreateProduct = async (req, res) => {
       sku: processedSkus,
       price,
       currency,
+      images,
       sellingPrice: sellingPrice || null,
       description: description || null,
       shortDescription: shortDescription || null,
-      images: uploadedProductImages,
       stock: stock || 0,
       sizes: sizes || [],
       dietaryPreference: dietaryPreference || null,
@@ -310,25 +265,6 @@ const CreateProduct = async (req, res) => {
           error.message || "Internal server error"
         )
       );
-  } finally {
-    if (req.files && Array.isArray(req.files)) {
-      await Promise.all(
-        req.files.map(async (file) => {
-          try {
-            if (
-              await fs
-                .access(file.path)
-                .then(() => true)
-                .catch(() => false)
-            ) {
-              fs.unlink(file.path);
-            }
-          } catch (error) {
-            console.error(`Error removing file ${file.path}:`, error);
-          }
-        })
-      );
-    }
   }
 };
 

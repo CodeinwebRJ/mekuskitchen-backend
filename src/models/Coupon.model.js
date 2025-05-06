@@ -14,6 +14,7 @@ const couponSchema = new mongoose.Schema({
   termsAndConditions: { type: String },
   description: { type: String },
   isActive: { type: Boolean, default: true },
+  category: [{ type: String }],
 });
 
 module.exports = mongoose.model("Coupon", couponSchema);

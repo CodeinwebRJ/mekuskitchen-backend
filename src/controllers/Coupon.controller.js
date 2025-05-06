@@ -241,6 +241,7 @@ const CreateCoupons = async (req, res) => {
       isActive,
       termsAndConditions,
       description,
+      category,
     } = req.body;
 
     if (!code || !discountType || !discountValue) {
@@ -252,6 +253,26 @@ const CreateCoupons = async (req, res) => {
             "Code, discountType, and discountValue are required"
           )
         );
+    }
+
+    let parsedCategory = [];
+    if (category !== undefined) {
+      if (!Array.isArray(category)) {
+        return res
+          .status(400)
+          .json(new ApiError(400, "Category must be an array of strings"));
+      }
+
+      const isValid = category.every(
+        (cat) => typeof cat === "string" && cat.trim() !== ""
+      );
+      if (!isValid) {
+        return res
+          .status(400)
+          .json(new ApiError(400, "Each category must be a non-empty string"));
+      }
+
+      parsedCategory = category.map((cat) => cat.trim());
     }
 
     const trimmedCode = code.trim().toUpperCase();
@@ -394,6 +415,7 @@ const CreateCoupons = async (req, res) => {
       isActive: parsedIsActive,
       termsAndConditions,
       description,
+      category: parsedCategory,
     });
 
     await coupon.save();
