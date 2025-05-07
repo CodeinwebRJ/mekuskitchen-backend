@@ -45,7 +45,7 @@ const Counts = async (req, res) => {
 
 const CreateCategory = async (req, res) => {
   try {
-    const { name, isActive } = req.body;
+    const { name, subCategories } = req.body;
 
     if (!name) {
       return res
@@ -53,32 +53,82 @@ const CreateCategory = async (req, res) => {
         .json(new ApiError(400, "Category name is required"));
     }
 
-    const existingCategory = await CategoryModel.findOne({ name });
+    if (subCategories) {
+      if (!Array.isArray(subCategories)) {
+        return res
+          .status(400)
+          .json(new ApiError(400, "subCategories must be an array"));
+      }
+
+      for (const subCat of subCategories) {
+        if (!subCat.name || typeof subCat.name !== "string") {
+          return res
+            .status(400)
+            .json(new ApiError(400, "Each subcategory must have a valid name"));
+        }
+
+        if (subCat.subSubCategories) {
+          if (!Array.isArray(subCat.subSubCategories)) {
+            return res
+              .status(400)
+              .json(new ApiError(400, "subSubCategories must be an array"));
+          }
+
+          for (const subSubCat of subCat.subSubCategories) {
+            if (!subSubCat.name || typeof subSubCat.name !== "string") {
+              return res
+                .status(400)
+                .json(
+                  new ApiError(
+                    400,
+                    "Each sub-subcategory must have a valid name"
+                  )
+                );
+            }
+          }
+        } else {
+          subCat.subSubCategories = [];
+        }
+      }
+    }
+
+    const existingCategory = await CategoryModel.findOne({
+      name: { $regex: new RegExp(`^${name}$`, "i") },
+    });
     if (existingCategory) {
       return res
         .status(400)
         .json(new ApiError(400, "Category with this name already exists"));
     }
 
-    const savedCategory = await CategoryModel.create({
+    // Create new category
+    const categoryData = {
       name,
-      isActive: isActive !== undefined ? isActive : true,
-    });
+      isActive: true,
+      subCategories: subCategories || [],
+    };
+
+    const savedCategory = await CategoryModel.create(categoryData);
 
     return res
       .status(201)
       .json(
-        new ApiResponse(200, savedCategory, "Category created successfully")
+        new ApiResponse(201, savedCategory, "Category created successfully")
       );
   } catch (error) {
     console.error("Error creating category:", error);
+    // Handle Mongoose validation errors
+    if (error.name === "ValidationError") {
+      const messages = Object.values(error.errors).map((err) => err.message);
+      return res.status(400).json(new ApiError(400, messages.join(", ")));
+    }
     return res.status(500).json(new ApiError(500, "Internal Server Error"));
   }
 };
 
 const CreateSubCategory = async (req, res) => {
   try {
-    const { categoryId, name, isActive } = req.body;
+    const { categoryId, name } = req.body;
 
     if (!categoryId || !name) {
       return res
@@ -95,9 +145,8 @@ const CreateSubCategory = async (req, res) => {
         .status(404)
         .json(new ApiError(404, "Parent category not found"));
     }
-
     const existingSubCategory = category.subCategories.find(
-      (subCat) => subCat.toLowerCase() === name.toLowerCase()
+      (subCat) => String(subCat.name) === String(name)
     );
 
     if (existingSubCategory) {
@@ -110,18 +159,14 @@ const CreateSubCategory = async (req, res) => {
           )
         );
     }
-
-    category.subCategories.push(name);
-    if (typeof isActive === "boolean") {
-      category.isActive = isActive;
-    }
-
+    category.subCategories.push({ name });
+    category.isActive = true;
     const updatedCategory = await category.save();
 
     return res
       .status(201)
       .json(
-        new ApiResponse(200, updatedCategory, "SubCategory added successfully")
+        new ApiResponse(201, updatedCategory, "SubCategory added successfully")
       );
   } catch (error) {
     console.error("Error creating subcategory:", error);
@@ -129,12 +174,77 @@ const CreateSubCategory = async (req, res) => {
   }
 };
 
+const CreateSubSubCategory = async (req, res) => {
+  try {
+    const { categoryId, subCategoryId, name } = req.body;
+
+    if (!categoryId || !subCategoryId || !name) {
+      return res
+        .status(400)
+        .json(
+          new ApiError(
+            400,
+            "Category ID, SubCategory ID, and SubSubCategory name are required"
+          )
+        );
+    }
+
+    const category = await CategoryModel.findById(categoryId);
+    if (!category) {
+      return res.status(404).json(new ApiError(404, "Category not found"));
+    }
+
+    const subCategory = category.subCategories.id(subCategoryId);
+    if (!subCategory) {
+      return res.status(404).json(new ApiError(404, "SubCategory not found"));
+    }
+
+    const existingSubSubCategory = subCategory.subSubCategories.find(
+      (subSubCat) => subSubCat.name.toLowerCase() === name.toLowerCase()
+    );
+    if (existingSubSubCategory) {
+      return res
+        .status(400)
+        .json(
+          new ApiError(
+            400,
+            "SubSubCategory with this name already exists in this subcategory"
+          )
+        );
+    }
+
+    subCategory.subSubCategories.push({ name });
+    const updatedCategory = await category.save();
+
+    return res
+      .status(201)
+      .json(
+        new ApiResponse(
+          201,
+          updatedCategory,
+          "SubSubCategory added successfully"
+        )
+      );
+  } catch (error) {
+    console.error("Error creating sub-subcategory:", error);
+    if (error.name === "ValidationError") {
+      const messages = Object.values(error.errors).map((err) => err.message);
+      return res.status(400).json(new ApiError(400, messages.join(", ")));
+    }
+    return res.status(500).json(new ApiError(500, "Internal Server Error"));
+  }
+};
+
 const getCategoryList = async (req, res) => {
   try {
-    const categories = await CategoryModel.find({});
+    const categories = await CategoryModel.find({ isActive: true })
+      .select("name subCategories isActive createdAt updatedAt")
+      .lean();
 
     if (!categories || categories.length === 0) {
-      return res.status(404).json(new ApiError(404, "No categories found"));
+      return res
+        .status(404)
+        .json(new ApiError(404, "No active categories found"));
     }
 
     return res
@@ -150,16 +260,21 @@ const getCategoryList = async (req, res) => {
 
 const getSubCategoryList = async (req, res) => {
   try {
-    const categories = await CategoryModel.find({}, "subCategories");
+    const categories = await CategoryModel.find({ isActive: true })
+      .select("name subCategories")
+      .lean();
 
     const subCategories = categories
-      .map((cat) => cat.subCategories)
-      .flat()
-      .filter((subCat) => subCat);
-
-    if (!subCategories || subCategories.length === 0) {
-      return res.status(404).json(new ApiError(404, "No subCategories found"));
-    }
+      .filter((cat) => cat.subCategories && cat.subCategories.length > 0)
+      .map((cat) => ({
+        categoryName: cat.name,
+        categoryId: cat._id,
+        subCategories: cat.subCategories.map((subCat) => ({
+          _id: subCat._id,
+          name: subCat.name,
+          subSubCategories: subCat.subSubCategories || [],
+        })),
+      }));
 
     return res
       .status(200)
@@ -167,11 +282,59 @@ const getSubCategoryList = async (req, res) => {
         new ApiResponse(
           200,
           subCategories,
-          "SubCategories retrieved successfully"
+          "Subcategories retrieved successfully"
         )
       );
   } catch (error) {
     console.error("Error in getSubCategoryList:", error);
+    return res.status(500).json(new ApiError(500, "Internal server error"));
+  }
+};
+
+const getSubSubCategoryList = async (req, res) => {
+  try {
+    const categories = await CategoryModel.find({ isActive: true })
+      .select("name subCategories")
+      .lean();
+
+    const subSubCategories = categories
+      .filter((cat) => cat.subCategories && cat.subCategories.length > 0)
+      .map((cat) => ({
+        categoryName: cat.name,
+        categoryId: cat._id,
+        subCategories: cat.subCategories
+          .filter(
+            (subCat) =>
+              subCat.subSubCategories && subCat.subSubCategories.length > 0
+          )
+          .map((subCat) => ({
+            subCategoryName: subCat.name,
+            subCategoryId: subCat._id,
+            subSubCategories: subCat.subSubCategories.map((subSubCat) => ({
+              _id: subSubCat._id,
+              name: subSubCat.name,
+            })),
+          })),
+      }))
+      .filter((cat) => cat.subCategories.length > 0);
+
+    if (!subSubCategories || subSubCategories.length === 0) {
+      return res
+        .status(404)
+        .json(new ApiError(404, "No sub-subcategories found"));
+    }
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          subSubCategories,
+          "Sub-subcategories retrieved successfully"
+        )
+      );
+  } catch (error) {
+    console.error("Error in getSubSubCategoryList:", error);
     return res.status(500).json(new ApiError(500, "Internal server error"));
   }
 };
@@ -254,5 +417,7 @@ module.exports = {
   getSubCategoryList,
   CreateCategory,
   CreateSubCategory,
+  CreateSubSubCategory,
+  getSubSubCategoryList,
   UploadImages,
 };

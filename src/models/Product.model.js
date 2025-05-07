@@ -56,6 +56,14 @@ const ProductSchema = mongoose.Schema(
       trim: true,
       default: null,
     },
+    subCategory: {
+      type: String,
+      trim: true,
+    },
+    ProductCategory: {
+      type: String,
+      trim: true,
+    },
     brand: {
       type: String,
       trim: true,

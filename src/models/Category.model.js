@@ -1,26 +1,38 @@
 const mongoose = require("mongoose");
 
-const CategorySchema = mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
-    trim: true,
-  },
-  subCategories: [
-    {
+const CategorySchema = mongoose.Schema(
+  {
+    name: {
       type: String,
-      trim: true,
+      required: true,
     },
-  ],
-  isActive: {
-    type: Boolean,
-    default: true,
+    subCategories: [
+      {
+        name: {
+          type: String,
+          trim: true,
+        },
+        subSubCategories: [
+          {
+            name: {
+              type: String,
+              trim: true,
+            },
+          },
+        ],
+      },
+    ],
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
   },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
-});
+  {
+    timestamps: true,
+  }
+);
+
+CategorySchema.index({ name: 1 });
 
 const Category = mongoose.model("Category", CategorySchema);
 

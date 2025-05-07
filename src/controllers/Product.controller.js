@@ -131,6 +131,8 @@ const CreateProduct = async (req, res) => {
       sizes,
       dietaryPreference,
       category,
+      subCategory,
+      subsubCategory,
       brand,
       features,
       specifications,
@@ -142,8 +144,6 @@ const CreateProduct = async (req, res) => {
       images,
       currency,
     } = req.body;
-
-    console.log(req.body);
 
     const existingName = await ProductModel.findOne({ name: name.trim() });
     if (existingName) {
@@ -241,6 +241,8 @@ const CreateProduct = async (req, res) => {
       sizes: sizes || [],
       dietaryPreference: dietaryPreference || null,
       category: category || null,
+      subCategory: subCategory || null,
+      ProductCategory: subsubCategory || null,
       brand: brand || null,
       features: features || [],
       specifications: safeParseJSON(specifications, "specifications") || {},
