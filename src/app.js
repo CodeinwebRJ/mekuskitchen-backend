@@ -9,7 +9,7 @@ const OrderRoute = require("./routes/Order.route");
 const TiffinMenuRoute = require("./routes/TiffinMenu.route");
 const ContactRoute = require("./routes/Contact.route");
 const WishlistRoute = require("./routes/Wishlist.route");
-const CountRoute = require("./routes/CountRoute.route");
+const CountRoute = require("./routes/Count.route");
 const CouponRoute = require("./routes/Coupon.route");
 require("dotenv").config();
 

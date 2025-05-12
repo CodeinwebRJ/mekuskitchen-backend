@@ -1,6 +1,8 @@
 const ApiError = require("../utils/ApiError");
 const ApiResponse = require("../utils/ApiResponse");
 const CouponModel = require("../models/Coupon.model");
+const CategoryModel = require("../models/Category.model");
+const mongoose = require("mongoose");
 
 const getAllCoupons = async (req, res) => {
   try {
@@ -86,9 +88,14 @@ const getAllCoupons = async (req, res) => {
   }
 };
 
+const isValidObjectId = (id) => {
+  return mongoose.Types.ObjectId.isValid(id) && id.length === 24;
+};
+
 const ValidateCoupon = async (req, res) => {
   try {
-    const { code, orderTotal, date } = req.query;
+    const { code, orderTotal, date, category, subCategory, subSubCategory } =
+      req.query;
 
     if (!code || !orderTotal) {
       return res
@@ -105,17 +112,11 @@ const ValidateCoupon = async (req, res) => {
 
     let validationDate = new Date();
     if (date) {
-      // Expect date in DD-MM-YYYY format
       const datePattern = /^(\d{2})-(\d{2})-(\d{4})$/;
       if (!datePattern.test(date)) {
         return res
           .status(400)
-          .json(
-            new ApiError(
-              400,
-              "Invalid date format. Use DD-MM-YYYY (e.g., 01-05-2025)"
-            )
-          );
+          .json(new ApiError(400, "Invalid date format. Use DD-MM-YYYY"));
       }
       const [day, month, year] = date.split("-").map(Number);
       validationDate = new Date(year, month - 1, day);
@@ -123,41 +124,26 @@ const ValidateCoupon = async (req, res) => {
         isNaN(validationDate.getTime()) ||
         validationDate.getFullYear() !== year
       ) {
-        return res
-          .status(400)
-          .json(
-            new ApiError(
-              400,
-              "Invalid date. Ensure DD-MM-YYYY format with valid values"
-            )
-          );
+        return res.status(400).json(new ApiError(400, "Invalid date values."));
       }
     }
 
-    // Find and update coupon atomically
-    const coupon = await CouponModel.findOneAndUpdate(
-      {
-        code: code.toUpperCase().trim(),
-        isActive: true,
-        $or: [
-          { startAt: { $exists: false } },
-          { startAt: { $lte: validationDate } },
-        ],
-        $or: [
-          { expiresAt: { $exists: false } },
-          { expiresAt: { $gte: validationDate } },
-        ],
-        // Ensure usage limit not reached
-        $expr: { $lt: ["$usedCount", "$usageLimit"] },
-      },
-      {
-        $inc: { usedCount: 1 }, // Increment usedCount
-      },
-      {
-        new: true, // Return updated document
-        lean: true, // Return plain JavaScript object
-      }
-    );
+    const trimmedCode = code.trim().toUpperCase();
+
+    // Fetch coupon first (don't increment yet)
+    const coupon = await CouponModel.findOne({
+      code: trimmedCode,
+      isActive: true,
+      $or: [
+        { startAt: { $exists: false } },
+        { startAt: { $lte: validationDate } },
+      ],
+      $or: [
+        { expiresAt: { $exists: false } },
+        { expiresAt: { $gte: validationDate } },
+      ],
+      $expr: { $lt: ["$usedCount", "$usageLimit"] },
+    }).lean();
 
     if (!coupon) {
       return res
@@ -165,17 +151,80 @@ const ValidateCoupon = async (req, res) => {
         .json(
           new ApiError(
             404,
-            "Coupon not found, invalid, or has reached its usage limit"
+            "Coupon not found, inactive, or usage limit reached"
           )
         );
     }
 
+    const inputCategories = {
+      category: category?.split(",").map((c) => c.trim()) || [],
+      subCategory: subCategory?.split(",").map((c) => c.trim()) || [],
+      subSubCategory: subSubCategory?.split(",").map((c) => c.trim()) || [],
+    };
+
+    const hasCategoryRestriction =
+      coupon.category?.length ||
+      coupon.subCategory?.length ||
+      coupon.subSubCategory?.length;
+
+    if (hasCategoryRestriction) {
+      let matched = false;
+      const couponCategoryNames = coupon.category?.map((cat) => cat) || [];
+      const fullCategories = await CategoryModel.find({
+        $or: [{ name: { $in: couponCategoryNames } }],
+        isActive: true,
+      }).lean();
+
+      for (const cat of fullCategories) {
+        if (
+          inputCategories.category.includes(String(cat._id)) ||
+          inputCategories.category.includes(cat.name)
+        ) {
+          matched = true;
+          break;
+        }
+
+        const subCatIds = cat.subCategories?.map((sc) => String(sc._id)) || [];
+        const subCatNames = cat.subCategories?.map((sc) => sc.name) || [];
+        if (
+          subCatIds.some((id) => inputCategories.subCategory.includes(id)) ||
+          subCatNames.some((name) => inputCategories.subCategory.includes(name))
+        ) {
+          matched = true;
+          break;
+        }
+
+        const subSubCatIds =
+          cat.subCategories?.flatMap(
+            (sc) => sc.subSubCategories?.map((ssc) => String(ssc._id)) || []
+          ) || [];
+        const subSubCatNames =
+          cat.subCategories?.flatMap(
+            (sc) => sc.subSubCategories?.map((ssc) => ssc.name) || []
+          ) || [];
+        if (
+          subSubCatIds.some((id) =>
+            inputCategories.subSubCategory.includes(id)
+          ) ||
+          subSubCatNames.some((name) =>
+            inputCategories.subSubCategory.includes(name)
+          )
+        ) {
+          matched = true;
+          break;
+        }
+      }
+
+      if (!matched) {
+        return res
+          .status(400)
+          .json(
+            new ApiError(400, "Coupon not applicable to selected categories")
+          );
+      }
+    }
+
     if (coupon.minOrderAmount && orderAmount < coupon.minOrderAmount) {
-      // Revert usedCount increment if minOrderAmount not met
-      await CouponModel.updateOne(
-        { _id: coupon._id },
-        { $inc: { usedCount: -1 } }
-      );
       return res
         .status(400)
         .json(
@@ -185,6 +234,12 @@ const ValidateCoupon = async (req, res) => {
           )
         );
     }
+
+    // If everything valid, now increment usedCount
+    await CouponModel.updateOne(
+      { _id: coupon._id },
+      { $inc: { usedCount: 1 } }
+    );
 
     let discount = 0;
     if (coupon.discountType === "percentage") {
@@ -196,31 +251,29 @@ const ValidateCoupon = async (req, res) => {
 
     discount = Math.round(discount * 100) / 100;
 
-    // Format expiresAt to DD-MM-YYYY if it exists
     let formattedExpiresAt = null;
     if (coupon.expiresAt) {
       const expiresDate = new Date(coupon.expiresAt);
-      const day = String(expiresDate.getDate()).padStart(2, "0");
-      const month = String(expiresDate.getMonth() + 1).padStart(2, "0");
-      const year = expiresDate.getFullYear();
-      formattedExpiresAt = `${day}-${month}-${year}`;
+      formattedExpiresAt = expiresDate.toLocaleDateString("en-GB");
     }
 
-    const payload = {
-      valid: true,
-      code: coupon.code,
-      discount,
-      discountType: coupon.discountType,
-      discountValue: coupon.discountValue,
-      minOrderAmount: coupon.minOrderAmount || 0,
-      expiresAt: formattedExpiresAt,
-      usageLimit: coupon.usageLimit,
-      usedCount: coupon.usedCount,
-    };
-
-    return res
-      .status(200)
-      .json(new ApiResponse(200, payload, "Coupon validated successfully"));
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          valid: true,
+          code: coupon.code,
+          discount,
+          discountType: coupon.discountType,
+          discountValue: coupon.discountValue,
+          minOrderAmount: coupon.minOrderAmount || 0,
+          expiresAt: formattedExpiresAt,
+          usageLimit: coupon.usageLimit,
+          usedCount: coupon.usedCount + 1,
+        },
+        "Coupon validated successfully"
+      )
+    );
   } catch (error) {
     console.error("Coupon validation error:", error);
     return res.status(500).json(new ApiError(500, "Internal Server Error"));
@@ -242,6 +295,8 @@ const CreateCoupons = async (req, res) => {
       termsAndConditions,
       description,
       category,
+      subCategory,
+      subSubCategory,
     } = req.body;
 
     if (!code || !discountType || !discountValue) {
@@ -255,25 +310,32 @@ const CreateCoupons = async (req, res) => {
         );
     }
 
-    let parsedCategory = [];
-    if (category !== undefined) {
-      if (!Array.isArray(category)) {
-        return res
-          .status(400)
-          .json(new ApiError(400, "Category must be an array of strings"));
+    // Helper function to validate and trim category-like arrays
+    const validateStringArray = (arr, fieldName) => {
+      if (arr !== undefined) {
+        if (!Array.isArray(arr)) {
+          throw new ApiError(400, `${fieldName} must be an array of strings`);
+        }
+        const isValid = arr.every(
+          (item) => typeof item === "string" && item.trim() !== ""
+        );
+        if (!isValid) {
+          throw new ApiError(
+            400,
+            `Each ${fieldName} must be a non-empty string`
+          );
+        }
+        return arr.map((item) => item.trim());
       }
+      return [];
+    };
 
-      const isValid = category.every(
-        (cat) => typeof cat === "string" && cat.trim() !== ""
-      );
-      if (!isValid) {
-        return res
-          .status(400)
-          .json(new ApiError(400, "Each category must be a non-empty string"));
-      }
-
-      parsedCategory = category.map((cat) => cat.trim());
-    }
+    const parsedCategory = validateStringArray(category, "category");
+    const parsedSubCategory = validateStringArray(subCategory, "subCategory");
+    const parsedSubSubCategory = validateStringArray(
+      subSubCategory,
+      "subSubCategory"
+    );
 
     const trimmedCode = code.trim().toUpperCase();
     if (!trimmedCode || trimmedCode.length < 3 || trimmedCode.length > 20) {
@@ -319,10 +381,7 @@ const CreateCoupons = async (req, res) => {
         return res
           .status(400)
           .json(
-            new ApiError(
-              400,
-              "Invalid startAt date format. Use DD-MM-YYYY (e.g., 01-05-2025)"
-            )
+            new ApiError(400, "Invalid startAt date format. Use DD-MM-YYYY")
           );
       }
       const [day, month, year] = startAt.split("-").map(Number);
@@ -334,10 +393,7 @@ const CreateCoupons = async (req, res) => {
         return res
           .status(400)
           .json(
-            new ApiError(
-              400,
-              "Invalid startAt date. perlu DD-MM-YYYY format dengan nilai yang valid"
-            )
+            new ApiError(400, "Invalid startAt date. Check format and values.")
           );
       }
     }
@@ -349,10 +405,7 @@ const CreateCoupons = async (req, res) => {
         return res
           .status(400)
           .json(
-            new ApiError(
-              400,
-              "Invalid expiresAt date format. Use DD-MM-YYYY (e.g., 01-05-2025)"
-            )
+            new ApiError(400, "Invalid expiresAt date format. Use DD-MM-YYYY")
           );
       }
       const [day, month, year] = expiresAt.split("-").map(Number);
@@ -366,7 +419,7 @@ const CreateCoupons = async (req, res) => {
           .json(
             new ApiError(
               400,
-              "Invalid expiresAt date. Ensure DD-MM-YYYY format with valid values"
+              "Invalid expiresAt date. Check format and values."
             )
           );
       }
@@ -416,6 +469,8 @@ const CreateCoupons = async (req, res) => {
       termsAndConditions,
       description,
       category: parsedCategory,
+      subCategory: parsedSubCategory,
+      subSubCategory: parsedSubSubCategory,
     });
 
     await coupon.save();
@@ -423,17 +478,11 @@ const CreateCoupons = async (req, res) => {
     const couponData = coupon.toObject();
     if (couponData.startAt) {
       const startDate = new Date(couponData.startAt);
-      const day = String(startDate.getDate()).padStart(2, "0");
-      const month = String(startDate.getMonth() + 1).padStart(2, "0");
-      const year = startDate.getFullYear();
-      couponData.startAt = `${day}-${month}-${year}`;
+      couponData.startAt = startDate.toLocaleDateString("en-GB");
     }
     if (couponData.expiresAt) {
       const expiresDate = new Date(couponData.expiresAt);
-      const day = String(expiresDate.getDate()).padStart(2, "0");
-      const month = String(expiresDate.getMonth() + 1).padStart(2, "0");
-      const year = expiresDate.getFullYear();
-      couponData.expiresAt = `${day}-${month}-${year}`;
+      couponData.expiresAt = expiresDate.toLocaleDateString("en-GB");
     }
 
     return res
@@ -441,15 +490,10 @@ const CreateCoupons = async (req, res) => {
       .json(new ApiResponse(201, couponData, "Coupon created successfully"));
   } catch (error) {
     console.error("Create coupon error:", error);
+    const statusCode = error instanceof ApiError ? error.statusCode : 500;
     return res
-      .status(500)
-      .json(
-        new ApiError(
-          500,
-          "Internal Server Error",
-          process.env.NODE_ENV === "development" ? error.message : undefined
-        )
-      );
+      .status(statusCode)
+      .json(new ApiError(statusCode, error.message || "Internal Server Error"));
   }
 };
 
