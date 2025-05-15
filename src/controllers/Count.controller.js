@@ -101,7 +101,6 @@ const CreateCategory = async (req, res) => {
         .json(new ApiError(400, "Category with this name already exists"));
     }
 
-    // Create new category
     const categoryData = {
       name,
       isActive: true,
@@ -117,7 +116,6 @@ const CreateCategory = async (req, res) => {
       );
   } catch (error) {
     console.error("Error creating category:", error);
-    // Handle Mongoose validation errors
     if (error.name === "ValidationError") {
       const messages = Object.values(error.errors).map((err) => err.message);
       return res.status(400).json(new ApiError(400, messages.join(", ")));
@@ -140,13 +138,14 @@ const CreateSubCategory = async (req, res) => {
 
     const category = await CategoryModel.findById(categoryId);
 
-    if (!category) {
+    if (!category || !category.isActive) {
       return res
         .status(404)
-        .json(new ApiError(404, "Parent category not found"));
+        .json(new ApiError(404, "Parent category not found or inactive"));
     }
+
     const existingSubCategory = category.subCategories.find(
-      (subCat) => String(subCat.name) === String(name)
+      (subCat) => String(subCat.name).trim() === String(name).trim()
     );
 
     if (existingSubCategory) {
@@ -159,8 +158,8 @@ const CreateSubCategory = async (req, res) => {
           )
         );
     }
-    category.subCategories.push({ name });
-    category.isActive = true;
+
+    category.subCategories.push({ name, isActive: true });
     const updatedCategory = await category.save();
 
     return res
@@ -190,17 +189,21 @@ const CreateSubSubCategory = async (req, res) => {
     }
 
     const category = await CategoryModel.findById(categoryId);
-    if (!category) {
-      return res.status(404).json(new ApiError(404, "Category not found"));
+    if (!category || !category.isActive) {
+      return res
+        .status(404)
+        .json(new ApiError(404, "Category not found or inactive"));
     }
 
     const subCategory = category.subCategories.id(subCategoryId);
-    if (!subCategory) {
-      return res.status(404).json(new ApiError(404, "SubCategory not found"));
+    if (!subCategory || !subCategory.isActive) {
+      return res
+        .status(404)
+        .json(new ApiError(404, "SubCategory not found or inactive"));
     }
 
     const existingSubSubCategory = subCategory.subSubCategories.find(
-      (subSubCat) => subSubCat.name.toLowerCase() === name.toLowerCase()
+      (subSubCat) => String(subSubCat.name).trim() === String(name).trim()
     );
     if (existingSubSubCategory) {
       return res
@@ -213,7 +216,7 @@ const CreateSubSubCategory = async (req, res) => {
         );
     }
 
-    subCategory.subSubCategories.push({ name });
+    subCategory.subSubCategories.push({ name, isActive: true });
     const updatedCategory = await category.save();
 
     return res
@@ -411,6 +414,200 @@ const UploadImages = async (req, res) => {
   }
 };
 
+const UpdateCategory = async (req, res) => {
+  try {
+    const { categoryId, name, isActive } = req.body;
+
+    if (!categoryId) {
+      return res.status(400).json(new ApiError(400, "Category ID is required"));
+    }
+
+    const category = await CategoryModel.findById(categoryId);
+    if (!category) {
+      return res.status(404).json(new ApiError(404, "Category not found"));
+    }
+
+    if (name) {
+      const existingCategory = await CategoryModel.findOne({
+        name: name.trim(),
+        _id: { $ne: categoryId },
+      });
+      if (existingCategory) {
+        return res
+          .status(400)
+          .json(new ApiError(400, "Category with this name already exists"));
+      }
+      category.name = name.trim();
+    }
+
+    if (typeof isActive === "boolean") {
+      category.isActive = isActive;
+    }
+
+    const updatedCategory = await category.save();
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(200, updatedCategory, "Category updated successfully")
+      );
+  } catch (error) {
+    console.error("Error updating category:", error);
+    if (error.name === "ValidationError") {
+      const messages = Object.values(error.errors).map((err) => err.message);
+      return res.status(400).json(new ApiError(400, messages.join(", ")));
+    }
+    return res.status(500).json(new ApiError(500, "Internal Server Error"));
+  }
+};
+
+const UpdateSubCategory = async (req, res) => {
+  try {
+    const { categoryId, subCategoryId, name, isActive } = req.body;
+
+    if (!categoryId || !subCategoryId) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "Category ID and SubCategory ID are required"));
+    }
+
+    const category = await CategoryModel.findById(categoryId);
+    if (!category || !category.isActive) {
+      return res
+        .status(404)
+        .json(new ApiError(404, "Category not found or inactive"));
+    }
+
+    const subCategory = category.subCategories.id(subCategoryId);
+    if (!subCategory) {
+      return res.status(404).json(new ApiError(404, "SubCategory not found"));
+    }
+
+    if (name) {
+      const existingSubCategory = category.subCategories.find(
+        (subCat) =>
+          String(subCat.name).trim() === String(name).trim() &&
+          subCat._id.toString() !== subCategoryId
+      );
+      if (existingSubCategory) {
+        return res
+          .status(400)
+          .json(
+            new ApiError(
+              400,
+              "SubCategory with this name already exists in this category"
+            )
+          );
+      }
+      subCategory.name = name.trim();
+    }
+
+    if (typeof isActive === "boolean") {
+      subCategory.isActive = isActive;
+    }
+
+    const updatedCategory = await category.save();
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          updatedCategory,
+          "SubCategory updated successfully"
+        )
+      );
+  } catch (error) {
+    console.error("Error updating subcategory:", error);
+    if (error.name === "ValidationError") {
+      const messages = Object.values(error.errors).map((err) => err.message);
+      return res.status(400).json(new ApiError(400, messages.join(", ")));
+    }
+    return res.status(500).json(new ApiError(500, "Internal Server Error"));
+  }
+};
+
+const UpdateSubSubCategory = async (req, res) => {
+  try {
+    const { categoryId, subCategoryId, subSubCategoryId, name, isActive } =
+      req.body;
+
+    if (!categoryId || !subCategoryId || !subSubCategoryId) {
+      return res
+        .status(400)
+        .json(
+          new ApiError(
+            400,
+            "Category ID, SubCategory ID, and SubSubCategory ID are required"
+          )
+        );
+    }
+
+    const category = await CategoryModel.findById(categoryId);
+    if (!category || !category.isActive) {
+      return res
+        .status(404)
+        .json(new ApiError(404, "Category not found or inactive"));
+    }
+
+    const subCategory = category.subCategories.id(subCategoryId);
+    if (!subCategory || !subCategory.isActive) {
+      return res
+        .status(404)
+        .json(new ApiError(404, "SubCategory not found or inactive"));
+    }
+
+    const subSubCategory = subCategory.subSubCategories.id(subSubCategoryId);
+    if (!subSubCategory) {
+      return res
+        .status(404)
+        .json(new ApiError(404, "SubSubCategory not found"));
+    }
+
+    if (name) {
+      const existingSubSubCategory = subCategory.subSubCategories.find(
+        (subSubCat) =>
+          String(subSubCat.name).trim() === String(name).trim() &&
+          subSubCat._id.toString() !== subSubCategoryId
+      );
+      if (existingSubSubCategory) {
+        return res
+          .status(400)
+          .json(
+            new ApiError(
+              400,
+              "SubSubCategory with this name already exists in this subcategory"
+            )
+          );
+      }
+      subSubCategory.name = name.trim();
+    }
+
+    if (typeof isActive === "boolean") {
+      subSubCategory.isActive = isActive;
+    }
+
+    const updatedCategory = await category.save();
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          updatedCategory,
+          "SubSubCategory updated successfully"
+        )
+      );
+  } catch (error) {
+    console.error("Error updating sub-subcategory:", error);
+    if (error.name === "ValidationError") {
+      const messages = Object.values(error.errors).map((err) => err.message);
+      return res.status(400).json(new ApiError(400, messages.join(", ")));
+    }
+    return res.status(500).json(new ApiError(500, "Internal Server Error"));
+  }
+};
+
 module.exports = {
   Counts,
   getCategoryList,
@@ -420,4 +617,7 @@ module.exports = {
   CreateSubSubCategory,
   getSubSubCategoryList,
   UploadImages,
+  UpdateCategory,
+  UpdateSubCategory,
+  UpdateSubSubCategory,
 };

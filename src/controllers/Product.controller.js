@@ -142,6 +142,7 @@ const CreateProduct = async (req, res) => {
       productDetail,
       tags,
       images,
+      SKUName,
       currency,
     } = req.body;
 
@@ -152,11 +153,14 @@ const CreateProduct = async (req, res) => {
         .json(new ApiError(409, "A product with this name already exists"));
     }
 
-    if (!name || !price || !currency) {
+    if (!name || !price || !SKUName || !currency) {
       return res
         .status(400)
         .json(
-          new ApiError(400, "Product name, price, and currency are required")
+          new ApiError(
+            400,
+            "Product name, price, sku and currency are required"
+          )
         );
     }
     if (price < 0) {
@@ -234,6 +238,7 @@ const CreateProduct = async (req, res) => {
       price,
       currency,
       images,
+      SKUName,
       sellingPrice: sellingPrice || null,
       description: description || null,
       shortDescription: shortDescription || null,
@@ -375,6 +380,7 @@ const EditProduct = async (req, res) => {
       description,
       shortDescription,
       stock,
+      SKUName,
       sizes,
       dietaryPreference,
       category,
@@ -438,6 +444,7 @@ const EditProduct = async (req, res) => {
     }
 
     if (currency) updateData.currency = currency;
+    if (SKUName) updateData.SKUName = SKUName;
     if (description) updateData.description = description;
     if (shortDescription) updateData.shortDescription = shortDescription;
     if (stock !== undefined) {
@@ -611,7 +618,6 @@ const EditProduct = async (req, res) => {
           }
         })
       );
-
       updateData.sku = uploadedSkuArray;
     }
 
@@ -662,7 +668,7 @@ const EditProduct = async (req, res) => {
     }
   }
 };
-
+  
 module.exports = {
   getAllProducts,
   CreateProduct,

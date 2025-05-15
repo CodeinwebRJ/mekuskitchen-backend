@@ -28,6 +28,10 @@ const ProductSchema = mongoose.Schema(
       type: String,
       trim: true,
     },
+    SKUName: {
+      type: String,
+      required: true,
+    },
     images: [
       {
         url: {

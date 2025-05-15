@@ -12,11 +12,19 @@ const CategorySchema = mongoose.Schema(
           type: String,
           trim: true,
         },
+        isActive: {
+          type: Boolean,
+          default: true,
+        },
         subSubCategories: [
           {
             name: {
               type: String,
               trim: true,
+            },
+            isActive: {
+              type: Boolean,
+              default: true,
             },
           },
         ],

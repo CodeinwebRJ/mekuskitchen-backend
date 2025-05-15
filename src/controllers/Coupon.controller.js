@@ -88,19 +88,24 @@ const getAllCoupons = async (req, res) => {
   }
 };
 
-const isValidObjectId = (id) => {
-  return mongoose.Types.ObjectId.isValid(id) && id.length === 24;
-};
-
 const ValidateCoupon = async (req, res) => {
   try {
-    const { code, orderTotal, date, category, subCategory, subSubCategory } =
-      req.query;
+    const {
+      code,
+      orderTotal,
+      date,
+      userId,
+      category,
+      subCategory,
+      subSubCategory,
+    } = req.query;
 
-    if (!code || !orderTotal) {
+    if (!code || !orderTotal || !userId) {
       return res
         .status(400)
-        .json(new ApiError(400, "Coupon code and order total are required"));
+        .json(
+          new ApiError(400, "Coupon code, order total, and userId are required")
+        );
     }
 
     const orderAmount = parseFloat(orderTotal);
@@ -130,7 +135,7 @@ const ValidateCoupon = async (req, res) => {
 
     const trimmedCode = code.trim().toUpperCase();
 
-    // Fetch coupon first (don't increment yet)
+    // Find active coupon
     const coupon = await CouponModel.findOne({
       code: trimmedCode,
       isActive: true,
@@ -143,7 +148,7 @@ const ValidateCoupon = async (req, res) => {
         { expiresAt: { $gte: validationDate } },
       ],
       $expr: { $lt: ["$usedCount", "$usageLimit"] },
-    }).lean();
+    });
 
     if (!coupon) {
       return res
@@ -156,6 +161,14 @@ const ValidateCoupon = async (req, res) => {
         );
     }
 
+    // Check if user has already used the coupon
+    if (coupon.usedBy.includes(userId)) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "You have already used this coupon"));
+    }
+
+    // Category filtering
     const inputCategories = {
       category: category?.split(",").map((c) => c.trim()) || [],
       subCategory: subCategory?.split(",").map((c) => c.trim()) || [],
@@ -235,10 +248,13 @@ const ValidateCoupon = async (req, res) => {
         );
     }
 
-    // If everything valid, now increment usedCount
+    // Update coupon with userId & increment usedCount
     await CouponModel.updateOne(
       { _id: coupon._id },
-      { $inc: { usedCount: 1 } }
+      {
+        $addToSet: { usedBy: userId },
+        $inc: { usedCount: 1 },
+      }
     );
 
     let discount = 0;
@@ -464,6 +480,7 @@ const CreateCoupons = async (req, res) => {
       expiresAt: parsedExpiresAt,
       usageLimit: parsedUsageLimit,
       usedCount: 0,
+      usedBy: [],
       image,
       isActive: parsedIsActive,
       termsAndConditions,
