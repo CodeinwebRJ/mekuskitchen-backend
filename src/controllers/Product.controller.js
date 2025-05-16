@@ -15,7 +15,15 @@ const safeParseJSON = (data, fieldName) => {
 
 const getAllProducts = async (req, res) => {
   try {
-    const { page, limit, search, sortBy, category } = req.body;
+    const {
+      page,
+      limit,
+      search,
+      sortBy,
+      category,
+      subCategory,
+      ProductCategory,
+    } = req.body;
 
     if (!page || !limit) {
       return res
@@ -27,10 +35,22 @@ const getAllProducts = async (req, res) => {
 
     let query = {};
     if (search) {
-      query.name = { $regex: search, $options: "i" };
+      const sanitizedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      query.$or = [
+        { name: { $regex: sanitizedSearch, $options: "i" } },
+        { description: { $regex: sanitizedSearch, $options: "i" } },
+        { brand: { $regex: sanitizedSearch, $options: "i" } },
+        { shortDescription: { $regex: sanitizedSearch, $options: "i" } },
+      ];
     }
     if (category) {
       query.category = { $regex: category, $options: "i" };
+    }
+    if (subCategory) {
+      query.subCategory = { $regex: subCategory, $options: "i" };
+    }
+    if (ProductCategory) {
+      query.ProductCategory = { $regex: ProductCategory, $options: "i" };
     }
 
     let pipeline = [
@@ -72,16 +92,16 @@ const getAllProducts = async (req, res) => {
     if (sortBy) {
       switch (sortBy.toLowerCase()) {
         case "high-to-low":
-          sortStage = { price: 1 };
+          sortStage = { price: -1 }; 
           break;
         case "low-to-high":
-          sortStage = { price: -1 };
+          sortStage = { price: 1 };
           break;
         case "sortbyaverageratings":
           sortStage = { averageRating: -1 };
           break;
         case "sortbylatest":
-          sortStage = { latestReview: -1 };
+          sortStage = { createdAt: -1 };
           break;
         default:
           sortStage = { createdAt: -1 };
@@ -167,13 +187,6 @@ const CreateProduct = async (req, res) => {
       return res
         .status(400)
         .json(new ApiError(400, "Price and sellingPrice cannot be negative"));
-    }
-    if (price < sellingPrice) {
-      return res
-        .status(400)
-        .json(
-          new ApiError(400, "Discount price must be less than regular price")
-        );
     }
 
     let skuArray = safeParseJSON(sku, "sku");
@@ -313,11 +326,13 @@ const RelatedProducts = async (req, res) => {
         {
           $match: {
             category: { $regex: /^tiffin$/i },
-            isActive: true,
+            Active: true,
           },
         },
         { $sample: { size: 5 } },
       ]);
+
+      console.log(tiffins);
 
       if (tiffins.length === 0) {
         return res
@@ -668,7 +683,7 @@ const EditProduct = async (req, res) => {
     }
   }
 };
-  
+
 module.exports = {
   getAllProducts,
   CreateProduct,

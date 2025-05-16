@@ -145,7 +145,9 @@ const CreateSubCategory = async (req, res) => {
     }
 
     const existingSubCategory = category.subCategories.find(
-      (subCat) => String(subCat.name).trim() === String(name).trim()
+      (subCat) =>
+        String(subCat.name).trim().toLowerCase() ===
+        String(name).trim().toLowerCase()
     );
 
     if (existingSubCategory) {
@@ -159,13 +161,19 @@ const CreateSubCategory = async (req, res) => {
         );
     }
 
-    category.subCategories.push({ name, isActive: true });
-    const updatedCategory = await category.save();
+    const newSubCategory = { name, isActive: true };
+    category.subCategories.push(newSubCategory);
+    await category.save();
+
+    const addedSubCategory =
+      category.subCategories[category.subCategories.length - 1];
+
+    console.log(addedSubCategory);
 
     return res
       .status(201)
       .json(
-        new ApiResponse(201, updatedCategory, "SubCategory added successfully")
+        new ApiResponse(201, addedSubCategory, "SubCategory added successfully")
       );
   } catch (error) {
     console.error("Error creating subcategory:", error);
@@ -183,7 +191,7 @@ const CreateSubSubCategory = async (req, res) => {
         .json(
           new ApiError(
             400,
-            "Category ID, SubCategory ID, and SubSubCategory name are required"
+            "Category ID, SubCategory ID, and Product Category name are required"
           )
         );
     }
@@ -209,27 +217,28 @@ const CreateSubSubCategory = async (req, res) => {
       return res
         .status(400)
         .json(
-          new ApiError(
-            400,
-            "SubSubCategory with this name already exists in this subcategory"
-          )
+          new ApiError(400, "This name already exists in this Product Category")
         );
     }
 
-    subCategory.subSubCategories.push({ name, isActive: true });
-    const updatedCategory = await category.save();
+    const newSubSubCategory = { name, isActive: true };
+    subCategory.subSubCategories.push(newSubSubCategory);
+    await category.save();
+
+    const addedSubSubCategory =
+      subCategory.subSubCategories[subCategory.subSubCategories.length - 1];
 
     return res
       .status(201)
       .json(
         new ApiResponse(
           201,
-          updatedCategory,
-          "SubSubCategory added successfully"
+          addedSubSubCategory,
+          "Product Category added successfully"
         )
       );
   } catch (error) {
-    console.error("Error creating sub-subcategory:", error);
+    console.error("Error creating Product Caategory:", error);
     if (error.name === "ValidationError") {
       const messages = Object.values(error.errors).map((err) => err.message);
       return res.status(400).json(new ApiError(400, messages.join(", ")));
@@ -432,6 +441,7 @@ const UpdateCategory = async (req, res) => {
         name: name.trim(),
         _id: { $ne: categoryId },
       });
+
       if (existingCategory) {
         return res
           .status(400)
@@ -440,11 +450,13 @@ const UpdateCategory = async (req, res) => {
       category.name = name.trim();
     }
 
-    if (typeof isActive === "boolean") {
-      category.isActive = isActive;
+    if (isActive !== undefined) {
+      category.isActive = Boolean(isActive);
     }
 
     const updatedCategory = await category.save();
+
+    console.log(updatedCategory);
 
     return res
       .status(200)
@@ -502,18 +514,20 @@ const UpdateSubCategory = async (req, res) => {
       subCategory.name = name.trim();
     }
 
-    if (typeof isActive === "boolean") {
-      subCategory.isActive = isActive;
+    if (isActive !== undefined) {
+      subCategory.isActive = Boolean(isActive);
     }
 
-    const updatedCategory = await category.save();
+    await category.save();
+
+    const updatedSubCategory = category.subCategories.id(subCategoryId);
 
     return res
       .status(200)
       .json(
         new ApiResponse(
           200,
-          updatedCategory,
+          updatedSubCategory,
           "SubCategory updated successfully"
         )
       );
@@ -583,18 +597,23 @@ const UpdateSubSubCategory = async (req, res) => {
       subSubCategory.name = name.trim();
     }
 
-    if (typeof isActive === "boolean") {
-      subSubCategory.isActive = isActive;
+    if (isActive !== undefined) {
+      subSubCategory.isActive = Boolean(isActive);
     }
 
-    const updatedCategory = await category.save();
+    await category.save();
+
+    // Re-fetch updated subSubCategory after save
+    const updatedSubSubCategory = category.subCategories
+      .id(subCategoryId)
+      .subSubCategories.id(subSubCategoryId);
 
     return res
       .status(200)
       .json(
         new ApiResponse(
           200,
-          updatedCategory,
+          updatedSubSubCategory,
           "SubSubCategory updated successfully"
         )
       );
@@ -604,6 +623,132 @@ const UpdateSubSubCategory = async (req, res) => {
       const messages = Object.values(error.errors).map((err) => err.message);
       return res.status(400).json(new ApiError(400, messages.join(", ")));
     }
+    return res.status(500).json(new ApiError(500, "Internal Server Error"));
+  }
+};
+
+const DeleteCategory = async (req, res) => {
+  try {
+    console.log(req.body);
+    const { categoryId } = req.body;
+
+    if (!categoryId) {
+      return res.status(400).json(new ApiError(400, "Category ID is required"));
+    }
+
+    const category = await CategoryModel.findById(categoryId);
+    if (!category) {
+      return res.status(404).json(new ApiError(404, "Category not found"));
+    }
+
+    await CategoryModel.findByIdAndDelete(categoryId);
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, null, "Category deleted successfully"));
+  } catch (error) {
+    console.error("Error deleting category:", error);
+    return res.status(500).json(new ApiError(500, "Internal Server Error"));
+  }
+};
+
+const DeleteSubCategory = async (req, res) => {
+  try {
+    const { categoryId, subCategoryId } = req.body;
+
+    if (!categoryId || !subCategoryId) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "Category ID and SubCategory ID are required"));
+    }
+
+    const category = await CategoryModel.findById(categoryId);
+    if (!category || !category.isActive) {
+      return res
+        .status(404)
+        .json(new ApiError(404, "Category not found or inactive"));
+    }
+
+    const subCategory = category.subCategories.id(subCategoryId);
+    if (!subCategory) {
+      return res.status(404).json(new ApiError(404, "SubCategory not found"));
+    }
+
+    category.subCategories.pull({ _id: subCategoryId });
+
+    const updatedCategory = await category.save();
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          updatedCategory,
+          "SubCategory deleted successfully"
+        )
+      );
+  } catch (error) {
+    console.error("Error deleting subcategory:", error);
+    if (error.name === "CastError") {
+      return res
+        .status(400)
+        .json(new ApiError(400, "Invalid Category or SubCategory ID"));
+    }
+    return res.status(500).json(new ApiError(500, "Internal Server Error"));
+  }
+};
+
+const DeleteSubSubCategory = async (req, res) => {
+  try {
+    const { categoryId, subCategoryId, subSubCategoryId } = req.body;
+
+    if (!categoryId || !subCategoryId || !subSubCategoryId) {
+      return res
+        .status(400)
+        .json(
+          new ApiError(
+            400,
+            "Category ID, SubCategory ID, and SubSubCategory ID are required"
+          )
+        );
+    }
+
+    const category = await CategoryModel.findById(categoryId);
+    if (!category || !category.isActive) {
+      return res
+        .status(404)
+        .json(new ApiError(404, "Category not found or inactive"));
+    }
+
+    const subCategory = category.subCategories.id(subCategoryId);
+    if (!subCategory || !subCategory.isActive) {
+      return res
+        .status(404)
+        .json(new ApiError(404, "SubCategory not found or inactive"));
+    }
+
+    const subSubCategory = subCategory.subSubCategories.id(subSubCategoryId);
+    if (!subSubCategory) {
+      return res
+        .status(404)
+        .json(new ApiError(404, "SubSubCategory not found"));
+    }
+
+    subCategory.subSubCategories.pull({ _id: subSubCategoryId });
+
+    const updatedCategory = await category.save();
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          updatedCategory,
+          "SubSubCategory deleted successfully"
+        )
+      );
+  } catch (error) {
+    console.error("Error deleting sub-subcategory:", error);
     return res.status(500).json(new ApiError(500, "Internal Server Error"));
   }
 };
@@ -620,4 +765,7 @@ module.exports = {
   UpdateCategory,
   UpdateSubCategory,
   UpdateSubSubCategory,
+  DeleteCategory,
+  DeleteSubCategory,
+  DeleteSubSubCategory,
 };

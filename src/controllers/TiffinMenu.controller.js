@@ -19,12 +19,28 @@ const getAllTiffinMenu = async (req, res) => {
 
     const tiffins = await TiffinMenuModel.find(filter).sort({ createdAt: -1 });
 
+    // Define the order of days
+    const dayOrder = [
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+      "Sunday",
+    ];
+
+    // Sort tiffins by dayOrder
+    const sortedTiffins = tiffins.sort((a, b) => {
+      return dayOrder.indexOf(a.day) - dayOrder.indexOf(b.day);
+    });
+
     return res
       .status(200)
       .json(
         new ApiResponse(
           200,
-          tiffins,
+          sortedTiffins,
           `Tiffin menus fetched successfully${
             filter.day ? ` for ${filter.day}` : ""
           }${filter.Active !== undefined ? ` (Active: ${filter.Active})` : ""}`
@@ -41,21 +57,18 @@ const createTiffinMenu = async (req, res) => {
     const { day, items, date, subTotal, totalAmount, description } = req.body;
     const imageFiles = req.files;
 
-    // Validate required fields
     if (!day || !items || items.length === 0) {
       return res
         .status(400)
         .json(new ApiError(400, "Day and non-empty items array are required"));
     }
 
-    // Validate image files
     if (!imageFiles || !Array.isArray(imageFiles) || imageFiles.length === 0) {
       return res
         .status(400)
         .json(new ApiError(400, "At least one image file is required"));
     }
 
-    // Validate subTotal and totalAmount
     if (
       (subTotal !== undefined && isNaN(subTotal)) ||
       (totalAmount !== undefined && isNaN(totalAmount))

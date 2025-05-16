@@ -10,7 +10,7 @@ const getUserAddress = async (req, res) => {
     if (!addresses.length) {
       return res
         .status(404)
-        .json(new ApiError(404, "No addresses found for this user"));
+        .json(new ApiResponse(200, [], "No addresses found for this user"));
     }
 
     return res
@@ -32,7 +32,7 @@ const getUserAddress = async (req, res) => {
 
 const createAddress = async (req, res) => {
   try {
-    const { userId, billing, shipping, isDifferent, isActive } = req.body;
+    const { userId, billing, shipping, isDifferent } = req.body;
 
     if (!userId) {
       return res.status(400).json(new ApiError(400, "User ID is required"));

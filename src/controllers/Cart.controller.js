@@ -83,12 +83,10 @@ const addToCart = async (req, res) => {
       day,
     } = req.body;
 
-    // Validate user_id
     if (!user_id) {
       return res.status(400).json(new ApiError(400, "User ID is required"));
     }
 
-    // Find or create cart
     let cart = await CartModel.findOne({ user: user_id });
     if (!cart) {
       cart = new CartModel({

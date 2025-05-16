@@ -1,7 +1,6 @@
 const ApiError = require("../utils/ApiError");
 const ApiResponse = require("../utils/ApiResponse");
 const ReviewModel = require("../models/Review.model");
-const ProductModel = require("../models/Product.model");
 
 const getAllReviews = async (req, res) => {
   try {
@@ -119,7 +118,7 @@ const getTopRatedProducts = async (req, res) => {
       },
       {
         $lookup: {
-          from: "products", 
+          from: "products",
           localField: "productObjectId",
           foreignField: "_id",
           as: "productDetails",
@@ -135,19 +134,48 @@ const getTopRatedProducts = async (req, res) => {
           totalReviews: 1,
           _id: 0,
           productDetails: {
-            product_name: "$productDetails.product_name",
+            product_name: "$productDetails.name",
             price: "$productDetails.price",
-            image_url: "$productDetails.image_url",
-            title: "$productDetails.title",
+            image_url: {
+              $arrayElemAt: [
+                {
+                  $filter: {
+                    input: "$productDetails.images",
+                    as: "image",
+                    cond: { $eq: ["$$image.isPrimary", true] },
+                  },
+                },
+                0,
+              ],
+            },
+            title: "$productDetails.name",
             description: "$productDetails.description",
+          },
+        },
+      },
+      {
+        $addFields: {
+          "productDetails.image_url": {
+            $ifNull: [
+              "$productDetails.image_url.url",
+              { $arrayElemAt: ["$productDetails.images.url", 0] },
+            ],
           },
         },
       },
     ]);
 
-    res.status(200).json(new ApiResponse(200, topProducts, "Top rated products fetched successfully"));
+    res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          topProducts,
+          "Top rated products fetched successfully"
+        )
+      );
   } catch (error) {
-    console.error('Error fetching top products:', error);
+    console.error("Error fetching top products:", error);
     res.status(500).json(new ApiError(500, "Internal Server Error"));
   }
 };
