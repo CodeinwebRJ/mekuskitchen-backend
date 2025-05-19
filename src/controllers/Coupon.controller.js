@@ -2,7 +2,6 @@ const ApiError = require("../utils/ApiError");
 const ApiResponse = require("../utils/ApiResponse");
 const CouponModel = require("../models/Coupon.model");
 const CategoryModel = require("../models/Category.model");
-const mongoose = require("mongoose");
 
 const getAllCoupons = async (req, res) => {
   try {
@@ -97,7 +96,7 @@ const ValidateCoupon = async (req, res) => {
       userId,
       category,
       subCategory,
-      subSubCategory,
+      ProductCategory,
     } = req.query;
 
     if (!code || !orderTotal || !userId) {
@@ -172,13 +171,13 @@ const ValidateCoupon = async (req, res) => {
     const inputCategories = {
       category: category?.split(",").map((c) => c.trim()) || [],
       subCategory: subCategory?.split(",").map((c) => c.trim()) || [],
-      subSubCategory: subSubCategory?.split(",").map((c) => c.trim()) || [],
+      ProductCategory: ProductCategory?.split(",").map((c) => c.trim()) || [],
     };
 
     const hasCategoryRestriction =
       coupon.category?.length ||
       coupon.subCategory?.length ||
-      coupon.subSubCategory?.length;
+      coupon.ProductCategory?.length;
 
     if (hasCategoryRestriction) {
       let matched = false;
@@ -217,10 +216,10 @@ const ValidateCoupon = async (req, res) => {
           ) || [];
         if (
           subSubCatIds.some((id) =>
-            inputCategories.subSubCategory.includes(id)
+            inputCategories.ProductCategory.includes(id)
           ) ||
           subSubCatNames.some((name) =>
-            inputCategories.subSubCategory.includes(name)
+            inputCategories.ProductCategory.includes(name)
           )
         ) {
           matched = true;
@@ -312,7 +311,7 @@ const CreateCoupons = async (req, res) => {
       description,
       category,
       subCategory,
-      subSubCategory,
+      ProductCategory,
     } = req.body;
 
     if (!code || !discountType || !discountValue) {
@@ -348,9 +347,9 @@ const CreateCoupons = async (req, res) => {
 
     const parsedCategory = validateStringArray(category, "category");
     const parsedSubCategory = validateStringArray(subCategory, "subCategory");
-    const parsedSubSubCategory = validateStringArray(
-      subSubCategory,
-      "subSubCategory"
+    const parsedProductCategory = validateStringArray(
+      ProductCategory,
+      "ProductCategory"
     );
 
     const trimmedCode = code.trim().toUpperCase();
@@ -487,7 +486,7 @@ const CreateCoupons = async (req, res) => {
       description,
       category: parsedCategory,
       subCategory: parsedSubCategory,
-      subSubCategory: parsedSubSubCategory,
+      ProductCategory: parsedProductCategory,
     });
 
     await coupon.save();

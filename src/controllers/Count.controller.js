@@ -168,8 +168,6 @@ const CreateSubCategory = async (req, res) => {
     const addedSubCategory =
       category.subCategories[category.subCategories.length - 1];
 
-    console.log(addedSubCategory);
-
     return res
       .status(201)
       .json(
@@ -353,7 +351,6 @@ const getSubSubCategoryList = async (req, res) => {
 
 const UploadImages = async (req, res) => {
   try {
-    console.log(req.files);
     const imageFiles = req.files || [];
 
     if (!imageFiles) {
@@ -455,8 +452,6 @@ const UpdateCategory = async (req, res) => {
     }
 
     const updatedCategory = await category.save();
-
-    console.log(updatedCategory);
 
     return res
       .status(200)
@@ -629,7 +624,6 @@ const UpdateSubSubCategory = async (req, res) => {
 
 const DeleteCategory = async (req, res) => {
   try {
-    console.log(req.body);
     const { categoryId } = req.body;
 
     if (!categoryId) {

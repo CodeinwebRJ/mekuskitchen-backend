@@ -16,7 +16,7 @@ const couponSchema = new mongoose.Schema({
   isActive: { type: Boolean, default: true },
   category: [{ type: String }],
   subCategory: [{ type: String }],
-  subSubCategory: [{ type: String }],
+  ProductCategory: [{ type: String }],
   usedBy: [{ type: String }],
 });
 

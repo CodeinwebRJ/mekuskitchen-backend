@@ -92,7 +92,7 @@ const getAllProducts = async (req, res) => {
     if (sortBy) {
       switch (sortBy.toLowerCase()) {
         case "high-to-low":
-          sortStage = { price: -1 }; 
+          sortStage = { price: -1 };
           break;
         case "low-to-high":
           sortStage = { price: 1 };
@@ -169,11 +169,11 @@ const CreateProduct = async (req, res) => {
     const existingName = await ProductModel.findOne({ name: name.trim() });
     if (existingName) {
       return res
-        .status(409)
+        .status(400)
         .json(new ApiError(409, "A product with this name already exists"));
     }
 
-    if (!name || !price || !SKUName || !currency) {
+    if (!name || !price || !currency) {
       return res
         .status(400)
         .json(
@@ -195,9 +195,9 @@ const CreateProduct = async (req, res) => {
       return res.status(400).json(new ApiError(400, "SKU must be an array"));
     }
 
-    const skuCodes = skuArray.map((item) => item.SKUName);
+    const skuCodes = skuArray.map((item) => item.SKUname);
     const existingProduct = await ProductModel.findOne({
-      "sku.code": { $in: skuCodes },
+      "sku.SKUName": { $in: skuCodes },
     });
 
     if (existingProduct) {
@@ -331,8 +331,6 @@ const RelatedProducts = async (req, res) => {
         },
         { $sample: { size: 5 } },
       ]);
-
-      console.log(tiffins);
 
       if (tiffins.length === 0) {
         return res
@@ -663,7 +661,6 @@ const EditProduct = async (req, res) => {
       );
   } finally {
     if (req.files && Array.isArray(req.files)) {
-      console.log(req.files);
       await Promise.all(
         req.files.map(async (file) => {
           try {
