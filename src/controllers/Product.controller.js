@@ -4,6 +4,7 @@ const ProductModel = require("../models/Product.model");
 const TiffinModel = require("../models/TiffinMenu.model");
 const { uploadToCloudinary } = require("../utils/Cloudinary.utils");
 const fs = require("fs");
+const mongoose = require("mongoose");
 
 const safeParseJSON = (data, fieldName) => {
   try {

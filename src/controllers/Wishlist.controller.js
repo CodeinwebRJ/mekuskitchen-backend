@@ -31,10 +31,8 @@ const addToWishlist = async (req, res) => {
   try {
     const { userid, product_id } = req.body;
 
-    if (!userid || !product_id) {
-      return res
-        .status(400)
-        .json(new ApiError(400, "User ID and Product ID are required"));
+    if (!product_id) {
+      return res.status(400).json(new ApiError(400, "Product ID is required"));
     }
 
     let wishlist = await WishlistModel.findOne({ userid });
@@ -74,10 +72,8 @@ const removeItems = async (req, res) => {
   try {
     const { userid, product_id } = req.body;
 
-    if (!userid || !product_id) {
-      return res
-        .status(400)
-        .json(new ApiError(400, "User ID and Product ID are required"));
+    if (!product_id) {
+      return res.status(400).json(new ApiError(400, "Product ID is required"));
     }
 
     // Check if the product exists in the wishlist first

@@ -83,10 +83,6 @@ const addToCart = async (req, res) => {
       day,
     } = req.body;
 
-    if (!user_id) {
-      return res.status(400).json(new ApiError(400, "User ID is required"));
-    }
-
     let cart = await CartModel.findOne({ user: user_id });
     if (!cart) {
       cart = new CartModel({
@@ -213,13 +209,13 @@ const updateCart = async (req, res) => {
   try {
     const { user_id, product_id, tiffinMenuId, day, quantity, type } = req.body;
 
-    if (!user_id || quantity == null || !type) {
+    if (!quantity|| !type) {
       return res
         .status(400)
         .json(
           new ApiError(
             400,
-            "user_id, quantity, and type ('product' or 'tiffin') are required"
+            "quantity, and type ('product' or 'tiffin') are required"
           )
         );
     }
