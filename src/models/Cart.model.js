@@ -27,13 +27,48 @@ const CartSchema = new mongoose.Schema(
     },
     items: [
       {
-        product_id: { type: String, required: true },
-        quantity: { type: Number, required: true },
-        price: { type: String, required: true },
+        product_id: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Product",
+          required: true,
+        },
+        quantity: {
+          type: Number,
+          required: true,
+          min: 1,
+        },
+        price: {
+          type: Number, // Changed to Number for calculations
+          required: true,
+          min: 0,
+        },
+        sku: {
+          skuId: {
+            type: mongoose.Schema.Types.ObjectId, // Reference to the SKU's _id
+          },
+          name: {
+            type: String, // e.g., "Iphone 16 black"
+          },
+          skuName: {
+            type: String, // e.g., "black-15"
+          },
+          images: [
+            {
+              type: String, // Store SKU-specific images
+            },
+          ],
+        },
+        combination: {
+          type: Map, // Store the selected combination (e.g., { Storage: 128, RAM: 12 })
+          of: mongoose.Schema.Types.Mixed,
+          default: {},
+        },
       },
     ],
     tiffins: [TiffinEntrySchema],
-    totalAmount: { type: String },
+    totalAmount: {
+      type: Number, // Changed to Number for calculations
+    },
   },
   {
     timestamps: true,

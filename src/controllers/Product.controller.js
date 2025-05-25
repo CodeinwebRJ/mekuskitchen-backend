@@ -322,12 +322,84 @@ const RelatedProducts = async (req, res) => {
       return res.status(400).json(new ApiError(400, "Category is required"));
     }
 
+    let pipeline = [
+      {
+        $match: {
+          category: { $regex: new RegExp(`^${category}$`, "i") },
+          isActive: true,
+        },
+      },
+      {
+        $addFields: {
+          productIdStr: { $toString: "$_id" },
+        },
+      },
+      {
+        $lookup: {
+          from: "reviews",
+          localField: "productIdStr",
+          foreignField: "product_id",
+          as: "reviews",
+        },
+      },
+      {
+        $addFields: {
+          averageRating: {
+            $cond: {
+              if: { $gt: [{ $size: "$reviews" }, 0] },
+              then: { $avg: "$reviews.rating" },
+              else: 0,
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          productIdStr: 0,
+          __v: 0,
+          reviews: 0,
+        },
+      },
+      { $sample: { size: 5 } },
+    ];
+
     if (category.toLowerCase() === "tiffin") {
       const tiffins = await TiffinModel.aggregate([
         {
           $match: {
             category: { $regex: /^tiffin$/i },
             Active: true,
+          },
+        },
+        {
+          $addFields: {
+            productIdStr: { $toString: "$_id" },
+          },
+        },
+        {
+          $lookup: {
+            from: "reviews",
+            localField: "productIdStr",
+            foreignField: "product_id",
+            as: "reviews",
+          },
+        },
+        {
+          $addFields: {
+            averageRating: {
+              $cond: {
+                if: { $gt: [{ $size: "$reviews" }, 0] },
+                then: { $avg: "$reviews.rating" },
+                else: 0,
+              },
+            },
+          },
+        },
+        {
+          $project: {
+            productIdStr: 0,
+            __v: 0,
+            reviews: 0,
           },
         },
         { $sample: { size: 5 } },
@@ -350,15 +422,7 @@ const RelatedProducts = async (req, res) => {
         );
     }
 
-    const products = await ProductModel.aggregate([
-      {
-        $match: {
-          category: { $regex: new RegExp(`^${category}$`, "i") },
-          isActive: true,
-        },
-      },
-      { $sample: { size: 5 } },
-    ]);
+    const products = await ProductModel.aggregate(pipeline);
 
     if (products.length === 0) {
       return res

@@ -1,6 +1,7 @@
 const ApiError = require("../utils/ApiError");
 const ApiResponse = require("../utils/ApiResponse");
 const WishlistModel = require("../models/Wishlist.model");
+const mongoose = require("mongoose");
 
 const getUserWishlist = async (req, res) => {
   try {
@@ -10,9 +11,7 @@ const getUserWishlist = async (req, res) => {
       return res.status(400).json(new ApiError(400, "User ID is required"));
     }
 
-    const wishlist = await WishlistModel.findOne({ userid }).populate(
-      "items.productId"
-    );
+    const wishlist = await WishlistModel.findOne({ userid }).populate("items");
 
     if (!wishlist) {
       return res
@@ -29,17 +28,23 @@ const getUserWishlist = async (req, res) => {
 
 const addToWishlist = async (req, res) => {
   try {
-    const { userid, product_id } = req.body;
+    const { userid, productId } = req.body;
 
-    if (!product_id) {
-      return res.status(400).json(new ApiError(400, "Product ID is required"));
+    if (!productId) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "User ID and Product ID are required"));
+    }
+
+    if (!mongoose.isValidObjectId(productId)) {
+      return res.status(400).json(new ApiError(400, "Invalid Product ID"));
     }
 
     let wishlist = await WishlistModel.findOne({ userid });
 
     if (wishlist) {
       const alreadyExists = wishlist.items.some(
-        (item) => item.productId.toString() === product_id.toString()
+        (item) => item.toString() === productId.toString()
       );
 
       if (alreadyExists) {
@@ -48,22 +53,25 @@ const addToWishlist = async (req, res) => {
           .json(new ApiError(409, "Product already in wishlist"));
       }
 
-      wishlist.items.push({ productId: product_id });
+      wishlist.items.push(productId);
       await wishlist.save();
-      wishlist = await wishlist.populate("items.productId");
+      wishlist = await WishlistModel.findById(wishlist._id).populate("items");
     } else {
       wishlist = await WishlistModel.create({
         userid,
-        items: [{ productId: product_id }],
+        items: [productId],
       });
-      wishlist = await wishlist.populate("items.productId");
+      wishlist = await WishlistModel.findById(wishlist._id).populate("items");
     }
 
     return res
       .status(200)
       .json(new ApiResponse(200, wishlist, "Added to wishlist"));
   } catch (error) {
-    console.error(error);
+    console.error("Error in addToWishlist:", error);
+    if (error.name === "CastError") {
+      return res.status(400).json(new ApiError(400, "Invalid data format"));
+    }
     return res.status(500).json(new ApiError(500, "Internal Server Error"));
   }
 };

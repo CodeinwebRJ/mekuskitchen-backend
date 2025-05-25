@@ -3,6 +3,7 @@ const ApiResponse = require("../utils/ApiResponse");
 const CartModel = require("../models/Cart.model");
 const TiffinModel = require("../models/TiffinMenu.model");
 const ProductModel = require("../models/Product.model");
+const mongoose = require("mongoose");
 
 const getUserCart = async (req, res) => {
   try {
@@ -76,20 +77,22 @@ const addToCart = async (req, res) => {
       product_id,
       quantity,
       price,
+      skuId,
+      combination,
       tiffinMenuId,
       customizedItems,
       specialInstructions,
       orderDate,
       day,
     } = req.body;
-
+    
     let cart = await CartModel.findOne({ user: user_id });
     if (!cart) {
       cart = new CartModel({
         user: user_id,
         items: [],
         tiffins: [],
-        totalAmount: "0.00",
+        totalAmount: 0,
       });
     }
 
@@ -101,7 +104,6 @@ const addToCart = async (req, res) => {
           .json(new ApiError(400, "Missing required tiffin fields"));
       }
 
-      // Validate customizedItems
       if (!Array.isArray(customizedItems) || customizedItems.length === 0) {
         return res
           .status(400)
@@ -131,9 +133,8 @@ const addToCart = async (req, res) => {
 
       if (tiffinIndex > -1) {
         cart.tiffins[tiffinIndex].quantity += tiffinQuantity;
-        cart.tiffins[tiffinIndex].totalAmount = (
-          tiffinTotal * cart.tiffins[tiffinIndex].quantity
-        ).toFixed(2);
+        cart.tiffins[tiffinIndex].totalAmount =
+          tiffinTotal * cart.tiffins[tiffinIndex].quantity;
       } else {
         cart.tiffins.push({
           tiffinMenuId,
@@ -142,16 +143,31 @@ const addToCart = async (req, res) => {
           orderDate,
           day,
           quantity: tiffinQuantity,
-          totalAmount: (tiffinTotal * tiffinQuantity).toFixed(2),
+          totalAmount: tiffinTotal * tiffinQuantity,
         });
       }
     }
     // Handle Product
     else {
-      if (!product_id || !quantity || !price) {
+      if (!product_id || !quantity || !price || !skuId || !combination) {
         return res
           .status(400)
-          .json(new ApiError(400, "Missing required product fields"));
+          .json(
+            new ApiError(
+              400,
+              "Missing required product fields (product_id, quantity, price, skuId, combination)"
+            )
+          );
+      }
+
+      // Validate product_id and skuId
+      if (
+        !mongoose.isValidObjectId(product_id) ||
+        !mongoose.isValidObjectId(skuId)
+      ) {
+        return res
+          .status(400)
+          .json(new ApiError(400, "Invalid product ID or SKU ID"));
       }
 
       const parsedQuantity = parseInt(quantity);
@@ -164,8 +180,55 @@ const addToCart = async (req, res) => {
         return res.status(400).json(new ApiError(400, "Invalid price"));
       }
 
+      // Validate product
+      const product = await ProductModel.findById(product_id);
+      if (!product) {
+        return res.status(404).json(new ApiError(404, "Product not found"));
+      }
+
+      // Ensure sku array exists
+      if (!Array.isArray(product.sku)) {
+        return res.status(400).json(new ApiError(400, "Product has no SKUs"));
+      }
+
+      // Find SKU by skuId
+      const sku = product.sku.find((s) => s._id.toString() === skuId);
+      if (!sku) {
+        return res.status(404).json(new ApiError(404, "SKU not found"));
+      }
+
+      // Ensure details is a Map and combinations exist
+      if (
+        !(sku.details instanceof Map) ||
+        !Array.isArray(sku.details.get("combinations"))
+      ) {
+        return res
+          .status(400)
+          .json(new ApiError(400, "Invalid SKU details or no combinations"));
+      }
+
+      // Validate combination
+      const combinations = sku.details.get("combinations");
+      const selectedCombination = combinations.find((c) =>
+        Object.keys(combination).every((key) => c[key] == combination[key])
+      );
+      if (!selectedCombination) {
+        return res.status(400).json(new ApiError(400, "Invalid combination"));
+      }
+
+      // Validate stock
+      if (selectedCombination.Stock < parsedQuantity) {
+        return res.status(400).json(new ApiError(400, "Insufficient stock"));
+      }
+
+      // Check if item with same product_id, skuId, and combination exists
       const itemIndex = cart.items.findIndex(
-        (item) => item.product_id === product_id
+        (item) =>
+          item.product_id.toString() === product_id &&
+          item.sku.skuId.toString() === skuId &&
+          Object.keys(combination).every(
+            (key) => item.combination.get(key) == combination[key]
+          )
       );
 
       if (itemIndex > -1) {
@@ -174,23 +237,28 @@ const addToCart = async (req, res) => {
         cart.items.push({
           product_id,
           quantity: parsedQuantity,
-          price: parsedPrice.toFixed(2),
+          price: parsedPrice,
+          sku: {
+            skuId,
+            name: sku.details.get("Name") || "",
+            skuName: sku.details.get("SKUname") || "",
+            images: sku.details.get("SKUImages") || [],
+          },
+          combination: combination,
         });
       }
     }
 
     // Calculate total amount
     const productTotal = cart.items.reduce((sum, item) => {
-      const itemPrice = parseFloat(item.price);
-      return sum + (isNaN(itemPrice) ? 0 : itemPrice) * item.quantity;
+      return sum + item.price * item.quantity;
     }, 0);
 
     const tiffinTotal = cart.tiffins.reduce((sum, tiffin) => {
-      const tiffinAmount = parseFloat(tiffin.totalAmount);
-      return sum + (isNaN(tiffinAmount) ? 0 : tiffinAmount);
+      return sum + (tiffin.totalAmount || 0);
     }, 0);
 
-    cart.totalAmount = (productTotal + tiffinTotal).toFixed(2);
+    cart.totalAmount = productTotal + tiffinTotal;
 
     await cart.save();
 
@@ -209,7 +277,7 @@ const updateCart = async (req, res) => {
   try {
     const { user_id, product_id, tiffinMenuId, day, quantity, type } = req.body;
 
-    if (!quantity|| !type) {
+    if (!quantity || !type) {
       return res
         .status(400)
         .json(
