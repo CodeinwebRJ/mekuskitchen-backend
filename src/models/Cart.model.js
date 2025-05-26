@@ -59,7 +59,7 @@ const CartSchema = new mongoose.Schema(
           ],
         },
         combination: {
-          type: Map, // Store the selected combination (e.g., { Storage: 128, RAM: 12 })
+          type: Map,
           of: mongoose.Schema.Types.Mixed,
           default: {},
         },
@@ -67,7 +67,7 @@ const CartSchema = new mongoose.Schema(
     ],
     tiffins: [TiffinEntrySchema],
     totalAmount: {
-      type: Number, // Changed to Number for calculations
+      type: Number,
     },
   },
   {

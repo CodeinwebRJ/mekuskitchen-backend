@@ -85,7 +85,11 @@ const addToCart = async (req, res) => {
       orderDate,
       day,
     } = req.body;
-    
+
+    if (!user_id) {
+      return res.status(400).json(new ApiError(400, "User ID is required"));
+    }
+
     let cart = await CartModel.findOne({ user: user_id });
     if (!cart) {
       cart = new CartModel({
@@ -96,45 +100,34 @@ const addToCart = async (req, res) => {
       });
     }
 
-    // Handle Tiffin
     if (isTiffinCart) {
+      // 🥗 Handle Tiffin Cart
       if (!tiffinMenuId || !customizedItems || !orderDate || !day) {
         return res
           .status(400)
           .json(new ApiError(400, "Missing required tiffin fields"));
       }
 
-      if (!Array.isArray(customizedItems) || customizedItems.length === 0) {
-        return res
-          .status(400)
-          .json(new ApiError(400, "Invalid customized items"));
-      }
-
       const tiffinTotal = customizedItems.reduce((sum, item) => {
         const itemPrice = parseFloat(item.price || 0);
         const itemQuantity = parseFloat(item.quantity || 1);
-        return (
-          sum +
-          (isNaN(itemPrice) ? 0 : itemPrice) *
-            (isNaN(itemQuantity) ? 1 : itemQuantity)
-        );
+        return sum + itemPrice * itemQuantity;
       }, 0);
 
       const tiffinQuantity = parseInt(quantity) || 1;
-      if (tiffinQuantity <= 0) {
-        return res
-          .status(400)
-          .json(new ApiError(400, "Invalid tiffin quantity"));
-      }
 
       const tiffinIndex = cart.tiffins.findIndex(
-        (tiffin) => tiffin.tiffinMenuId === tiffinMenuId && tiffin.day === day
+        (t) =>
+          t.tiffinMenuId === tiffinMenuId &&
+          t.day === day &&
+          t.orderDate === orderDate
       );
 
       if (tiffinIndex > -1) {
         cart.tiffins[tiffinIndex].quantity += tiffinQuantity;
-        cart.tiffins[tiffinIndex].totalAmount =
-          tiffinTotal * cart.tiffins[tiffinIndex].quantity;
+        cart.tiffins[tiffinIndex].totalAmount = (
+          tiffinTotal * cart.tiffins[tiffinIndex].quantity
+        ).toString();
       } else {
         cart.tiffins.push({
           tiffinMenuId,
@@ -143,130 +136,158 @@ const addToCart = async (req, res) => {
           orderDate,
           day,
           quantity: tiffinQuantity,
-          totalAmount: tiffinTotal * tiffinQuantity,
+          totalAmount: (tiffinTotal * tiffinQuantity).toString(),
         });
       }
-    }
-    // Handle Product
-    else {
-      if (!product_id || !quantity || !price || !skuId || !combination) {
+    } else {
+      // 🛒 Handle Product Cart
+      if (!product_id || !quantity || !price) {
         return res
           .status(400)
-          .json(
-            new ApiError(
-              400,
-              "Missing required product fields (product_id, quantity, price, skuId, combination)"
-            )
-          );
-      }
-
-      // Validate product_id and skuId
-      if (
-        !mongoose.isValidObjectId(product_id) ||
-        !mongoose.isValidObjectId(skuId)
-      ) {
-        return res
-          .status(400)
-          .json(new ApiError(400, "Invalid product ID or SKU ID"));
+          .json(new ApiError(400, "Missing required product fields"));
       }
 
       const parsedQuantity = parseInt(quantity);
       const parsedPrice = parseFloat(price);
 
-      if (isNaN(parsedQuantity) || parsedQuantity <= 0) {
-        return res.status(400).json(new ApiError(400, "Invalid quantity"));
-      }
-      if (isNaN(parsedPrice) || parsedPrice < 0) {
-        return res.status(400).json(new ApiError(400, "Invalid price"));
-      }
-
-      // Validate product
       const product = await ProductModel.findById(product_id);
       if (!product) {
         return res.status(404).json(new ApiError(404, "Product not found"));
       }
 
-      // Ensure sku array exists
-      if (!Array.isArray(product.sku)) {
-        return res.status(400).json(new ApiError(400, "Product has no SKUs"));
-      }
+      const isUsingSku =
+        skuId && skuId !== "null" && skuId !== "undefined" && skuId !== "";
 
-      // Find SKU by skuId
-      const sku = product.sku.find((s) => s._id.toString() === skuId);
-      if (!sku) {
-        return res.status(404).json(new ApiError(404, "SKU not found"));
-      }
+      if (isUsingSku) {
+        if (!mongoose.isValidObjectId(skuId)) {
+          return res.status(400).json(new ApiError(400, "Invalid SKU ID"));
+        }
 
-      // Ensure details is a Map and combinations exist
-      if (
-        !(sku.details instanceof Map) ||
-        !Array.isArray(sku.details.get("combinations"))
-      ) {
-        return res
-          .status(400)
-          .json(new ApiError(400, "Invalid SKU details or no combinations"));
-      }
+        const sku = product.sku.find((s) => s._id.toString() === skuId);
+        if (!sku) {
+          return res.status(404).json(new ApiError(404, "SKU not found"));
+        }
 
-      // Validate combination
-      const combinations = sku.details.get("combinations");
-      const selectedCombination = combinations.find((c) =>
-        Object.keys(combination).every((key) => c[key] == combination[key])
-      );
-      if (!selectedCombination) {
-        return res.status(400).json(new ApiError(400, "Invalid combination"));
-      }
+        const skuDetails = sku.details || new Map();
+        const combinations = skuDetails.get("combinations") || [];
+        const skuImages =
+          skuDetails.get("SKUImages") || product.images.map((img) => img.url);
 
-      // Validate stock
-      if (selectedCombination.Stock < parsedQuantity) {
-        return res.status(400).json(new ApiError(400, "Insufficient stock"));
-      }
+        const cleanCombination = { ...combination };
+        delete cleanCombination.Price;
 
-      // Check if item with same product_id, skuId, and combination exists
-      const itemIndex = cart.items.findIndex(
-        (item) =>
-          item.product_id.toString() === product_id &&
-          item.sku.skuId.toString() === skuId &&
-          Object.keys(combination).every(
-            (key) => item.combination.get(key) == combination[key]
+        const matchedCombination = combinations.find((comb) =>
+          Object.keys(cleanCombination).every(
+            (key) => comb[key] == cleanCombination[key]
           )
-      );
+        );
 
-      if (itemIndex > -1) {
-        cart.items[itemIndex].quantity += parsedQuantity;
-      } else {
-        cart.items.push({
-          product_id,
-          quantity: parsedQuantity,
-          price: parsedPrice,
-          sku: {
-            skuId,
-            name: sku.details.get("Name") || "",
-            skuName: sku.details.get("SKUname") || "",
-            images: sku.details.get("SKUImages") || [],
-          },
-          combination: combination,
+        if (!matchedCombination) {
+          return res
+            .status(400)
+            .json(new ApiError(400, "Invalid SKU combination"));
+        }
+
+        if (
+          matchedCombination.Stock !== undefined &&
+          parsedQuantity > matchedCombination.Stock
+        ) {
+          return res
+            .status(400)
+            .json(new ApiError(400, "Quantity exceeds SKU stock"));
+        }
+
+        if (
+          matchedCombination.Price !== undefined &&
+          parsedPrice !== matchedCombination.Price
+        ) {
+          return res
+            .status(400)
+            .json(
+              new ApiError(
+                400,
+                `Price mismatch: expected ${matchedCombination.Price}`
+              )
+            );
+        }
+
+        // Check if SKU item already in cart
+        const itemIndex = cart.items.findIndex((item) => {
+          const isSameProduct =
+            item.product_id.toString() === product_id.toString();
+          const isSameSku = item.sku?.skuId?.toString() === skuId;
+          const isSameCombination =
+            JSON.stringify(item.combination) ===
+            JSON.stringify(cleanCombination);
+          return isSameProduct && isSameSku && isSameCombination;
         });
+
+        if (itemIndex > -1) {
+          cart.items[itemIndex].quantity += parsedQuantity;
+        } else {
+          cart.items.push({
+            product_id,
+            quantity: parsedQuantity,
+            price: parsedPrice,
+            combination: cleanCombination,
+            sku: {
+              skuId: sku._id,
+              name: skuDetails.get("Name") || product.name,
+              skuName: skuDetails.get("SKUname") || product.SKUName,
+              images: skuImages,
+            },
+          });
+        }
+      } else {
+        if (product.stock !== null && parsedQuantity > product.stock) {
+          return res
+            .status(400)
+            .json(
+              new ApiError(400, "Requested quantity exceeds available stock")
+            );
+        }
+
+        itemIndex = cart.items.findIndex(
+          (item) =>
+            item.product_id.toString() === product_id.toString() &&
+            (!item.sku || !item.sku.skuId)
+        );
+
+        if (itemIndex > -1) {
+          cart.items[itemIndex].quantity += parsedQuantity;
+        } else {
+          cart.items.push({
+            product_id,
+            quantity: parsedQuantity,
+            price: parsedPrice,
+            sku: null,
+            combination: {},
+          });
+        }
       }
     }
 
-    // Calculate total amount
-    const productTotal = cart.items.reduce((sum, item) => {
-      return sum + item.price * item.quantity;
-    }, 0);
-
-    const tiffinTotal = cart.tiffins.reduce((sum, tiffin) => {
-      return sum + (tiffin.totalAmount || 0);
-    }, 0);
-
+    const productTotal = cart.items.reduce(
+      (sum, item) => sum + (item.price || 0) * (item.quantity || 0),
+      0
+    );
+    const tiffinTotal = cart.tiffins.reduce(
+      (sum, tiffin) => sum + parseFloat(tiffin.totalAmount || 0),
+      0
+    );
     cart.totalAmount = productTotal + tiffinTotal;
 
     await cart.save();
 
+    const populatedCart = await CartModel.findById(cart._id)
+      .populate("items.product_id", "name price SKUName images")
+      .lean();
+
     return res
       .status(200)
-      .json(new ApiResponse(200, cart, "Cart updated successfully"));
+      .json(new ApiResponse(200, populatedCart, "Cart updated successfully"));
   } catch (error) {
-    console.error("Cart update error:", error);
+    console.error("Error in addToCart:", error);
     return res
       .status(500)
       .json(new ApiError(500, "Internal Server Error", [error.message]));
@@ -277,13 +298,18 @@ const updateCart = async (req, res) => {
   try {
     const { user_id, product_id, tiffinMenuId, day, quantity, type } = req.body;
 
-    if (!quantity || !type) {
+    if (
+      quantity === undefined ||
+      quantity === null ||
+      !type ||
+      !["product", "tiffin"].includes(type)
+    ) {
       return res
         .status(400)
         .json(
           new ApiError(
             400,
-            "quantity, and type ('product' or 'tiffin') are required"
+            "Valid quantity and type ('product' or 'tiffin') are required"
           )
         );
     }
@@ -302,7 +328,7 @@ const updateCart = async (req, res) => {
       }
 
       const itemIndex = cart.items.findIndex(
-        (item) => item.product_id === product_id
+        (item) => item.product_id.toString() === product_id
       );
 
       if (itemIndex === -1) {
@@ -314,7 +340,7 @@ const updateCart = async (req, res) => {
       if (quantity === 0) {
         cart.items.splice(itemIndex, 1);
       } else {
-        cart.items[itemIndex].quantity = quantity;
+        cart.items[itemIndex].quantity = parseInt(quantity);
       }
     } else if (type === "tiffin") {
       if (!tiffinMenuId || !day) {
@@ -337,7 +363,7 @@ const updateCart = async (req, res) => {
         cart.tiffins.splice(tiffinIndex, 1);
       } else {
         const tiffin = cart.tiffins[tiffinIndex];
-        tiffin.quantity = quantity;
+        tiffin.quantity = parseInt(quantity);
 
         const basePrice = tiffin.customizedItems.reduce((sum, item) => {
           return (
@@ -347,14 +373,10 @@ const updateCart = async (req, res) => {
 
         tiffin.totalAmount = (basePrice * quantity).toFixed(2);
       }
-    } else {
-      return res
-        .status(400)
-        .json(new ApiError(400, "Invalid type. Must be 'product' or 'tiffin'"));
     }
 
     const productTotal = cart.items.reduce(
-      (sum, item) => sum + parseFloat(item.price) * item.quantity,
+      (sum, item) => sum + item.price * item.quantity,
       0
     );
 
@@ -363,7 +385,7 @@ const updateCart = async (req, res) => {
       0
     );
 
-    cart.totalAmount = (productTotal + tiffinTotal).toFixed(2);
+    cart.totalAmount = productTotal + tiffinTotal;
 
     await cart.save();
 
@@ -397,7 +419,7 @@ const updateCart = async (req, res) => {
       .status(200)
       .json(new ApiResponse(200, enrichedCart, "Cart updated successfully"));
   } catch (error) {
-    console.error(error);
+    console.error("Error in updateCart:", error);
     return res
       .status(500)
       .json(new ApiError(500, "Internal Server Error", [error.message]));
