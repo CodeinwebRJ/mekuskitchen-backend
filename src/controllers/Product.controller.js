@@ -24,6 +24,8 @@ const getAllProducts = async (req, res) => {
       category,
       subCategory,
       ProductCategory,
+      brand,
+      ratings,
     } = req.body;
 
     if (!page || !limit) {
@@ -44,14 +46,36 @@ const getAllProducts = async (req, res) => {
         { shortDescription: { $regex: sanitizedSearch, $options: "i" } },
       ];
     }
-    if (category) {
-      query.category = { $regex: category, $options: "i" };
+
+    const sanitizeArray = (arr) =>
+      arr.filter((item) => typeof item === "string" && item.trim() !== "");
+
+    if (Array.isArray(category)) {
+      const filtered = sanitizeArray(category);
+      if (filtered.length > 0) {
+        query.category = { $in: filtered };
+      }
     }
-    if (subCategory) {
-      query.subCategory = { $regex: subCategory, $options: "i" };
+
+    if (Array.isArray(subCategory)) {
+      const filtered = sanitizeArray(subCategory);
+      if (filtered.length > 0) {
+        query.subCategory = { $in: filtered };
+      }
     }
-    if (ProductCategory) {
-      query.ProductCategory = { $regex: ProductCategory, $options: "i" };
+
+    if (Array.isArray(ProductCategory)) {
+      const filtered = sanitizeArray(ProductCategory);
+      if (filtered.length > 0) {
+        query.ProductCategory = { $in: filtered };
+      }
+    }
+
+    if (Array.isArray(brand)) {
+      const filtered = sanitizeArray(brand);
+      if (filtered.length > 0) {
+        query.brand = { $in: filtered };
+      }
     }
 
     let pipeline = [
@@ -80,14 +104,28 @@ const getAllProducts = async (req, res) => {
           },
         },
       },
-      {
-        $project: {
-          productIdStr: 0,
-          __v: 0,
-          reviews: 0,
-        },
-      },
     ];
+
+    if (Array.isArray(ratings) && ratings.length > 0) {
+      const validRatings = ratings
+        .map((rating) => parseFloat(rating))
+        .filter((rating) => !isNaN(rating) && rating >= 0 && rating <= 5); // Ensure ratings are between 0 and 5
+      if (validRatings.length > 0) {
+        pipeline.push({
+          $match: {
+            averageRating: { $in: validRatings },
+          },
+        });
+      }
+    }
+
+    pipeline.push({
+      $project: {
+        productIdStr: 0,
+        __v: 0,
+        reviews: 0,
+      },
+    });
 
     let sortStage = {};
     if (sortBy) {
@@ -121,6 +159,7 @@ const getAllProducts = async (req, res) => {
     if (!products || products.length === 0) {
       return res.status(404).json(new ApiError(404, "No products found"));
     }
+
     const resData = {
       success: true,
       total: totalProducts,
@@ -128,6 +167,7 @@ const getAllProducts = async (req, res) => {
       pages: Math.ceil(totalProducts / limit),
       data: products,
     };
+
     res
       .status(200)
       .json(new ApiResponse(200, resData, "Fetched Data Successfully"));
@@ -137,7 +177,7 @@ const getAllProducts = async (req, res) => {
       .status(500)
       .json(new ApiError(500, "Server error while fetching products"));
   }
-};
+};  
 
 const CreateProduct = async (req, res) => {
   try {

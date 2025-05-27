@@ -78,32 +78,21 @@ const addToWishlist = async (req, res) => {
 
 const removeItems = async (req, res) => {
   try {
-    const { userid, product_id } = req.body;
+    const { userid, productId } = req.body;
 
-    if (!product_id) {
+    if (!productId) {
       return res.status(400).json(new ApiError(400, "Product ID is required"));
     }
 
-    // Check if the product exists in the wishlist first
-    const wishlist = await WishlistModel.findOne({ userid });
-
-    if (!wishlist) {
-      return res.status(404).json(new ApiError(404, "Wishlist not found"));
-    }
-
-    const itemIndex = wishlist.items.findIndex(
-      (item) => item.productId.toString() === product_id.toString()
+    const updatedWishlist = await WishlistModel.findOneAndUpdate(
+      { userid: userid },
+      { $pull: { items: productId } },
+      { new: true }
     );
 
-    if (itemIndex === -1) {
-      return res
-        .status(404)
-        .json(new ApiError(404, "Product not found in wishlist"));
+    if (!updatedWishlist) {
+      return res.status(404).json({ message: "Wishlist not found." });
     }
-
-    // Remove the item manually
-    wishlist.items.splice(itemIndex, 1);
-    await wishlist.save();
 
     return res
       .status(200)
