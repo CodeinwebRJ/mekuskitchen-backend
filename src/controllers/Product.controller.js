@@ -109,7 +109,7 @@ const getAllProducts = async (req, res) => {
     if (Array.isArray(ratings) && ratings.length > 0) {
       const validRatings = ratings
         .map((rating) => parseFloat(rating))
-        .filter((rating) => !isNaN(rating) && rating >= 0 && rating <= 5); // Ensure ratings are between 0 and 5
+        .filter((rating) => !isNaN(rating) && rating >= 0 && rating <= 5);
       if (validRatings.length > 0) {
         pipeline.push({
           $match: {
@@ -156,16 +156,12 @@ const getAllProducts = async (req, res) => {
     const products = await ProductModel.aggregate(pipeline).exec();
     const totalProducts = await ProductModel.countDocuments(query);
 
-    if (!products || products.length === 0) {
-      return res.status(404).json(new ApiError(404, "No products found"));
-    }
-
     const resData = {
       success: true,
       total: totalProducts,
       page,
       pages: Math.ceil(totalProducts / limit),
-      data: products,
+      data: products || [],
     };
 
     res
@@ -177,7 +173,7 @@ const getAllProducts = async (req, res) => {
       .status(500)
       .json(new ApiError(500, "Server error while fetching products"));
   }
-};  
+};
 
 const CreateProduct = async (req, res) => {
   try {
@@ -786,10 +782,40 @@ const EditProduct = async (req, res) => {
   }
 };
 
+const HomePageProduct = async (req, res) => {
+  try {
+    const OurProduct = await ProductModel.aggregate([
+      { $match: { isActive: true } },
+      { $sample: { size: 5 } },
+    ]);
+
+    const NewProducts = await ProductModel.find({ isActive: true })
+      .sort({ createdAt: -1 })
+      .limit(5);
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          { OurProduct, NewProducts },
+          "Product data fetched"
+        )
+      );
+  } catch (error) {
+    console.error("Error fetching home page products:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while fetching products",
+    });
+  }
+};
+
 module.exports = {
   getAllProducts,
   CreateProduct,
   getProductById,
   RelatedProducts,
   EditProduct,
+  HomePageProduct,
 };

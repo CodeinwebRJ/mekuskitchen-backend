@@ -1,6 +1,7 @@
 const ApiError = require("../utils/ApiError");
 const ApiResponse = require("../utils/ApiResponse");
 const OrderModel = require("../models/Order.model");
+const CartModel = require("../models/Cart.model");
 const { updateSearchIndex } = require("../models/Review.model");
 
 const createOrder = async (req, res) => {
@@ -18,7 +19,6 @@ const createOrder = async (req, res) => {
       deliveryTime,
     } = req.body;
 
-    // Validate required fields
     if (!userId || !cartId || !addressId || !totalAmount) {
       return res.status(400).json(new ApiError(400, "Missing required fields"));
     }
@@ -37,6 +37,8 @@ const createOrder = async (req, res) => {
       taxAmount,
       notes,
     });
+
+    await CartModel.findByIdAndDelete(cartId);
 
     return res
       .status(201)
@@ -72,7 +74,6 @@ const getOrderById = async (req, res) => {
   }
 };
 
-//get all for admin
 const getAllOrders = async (req, res) => {
   try {
     const {
@@ -146,7 +147,6 @@ const getAllOrders = async (req, res) => {
   }
 };
 
-// user order history
 const getOrdersByUser = async (req, res) => {
   try {
     const { userId } = req.params;

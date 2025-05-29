@@ -101,7 +101,6 @@ const addToCart = async (req, res) => {
     }
 
     if (isTiffinCart) {
-      // 🥗 Handle Tiffin Cart
       if (!tiffinMenuId || !customizedItems || !orderDate || !day) {
         return res
           .status(400)
@@ -140,7 +139,6 @@ const addToCart = async (req, res) => {
         });
       }
     } else {
-      // 🛒 Handle Product Cart
       if (!product_id || !quantity || !price) {
         return res
           .status(400)
@@ -278,14 +276,32 @@ const addToCart = async (req, res) => {
     cart.totalAmount = productTotal + tiffinTotal;
 
     await cart.save();
+    const rawCart = await CartModel.findById(cart._id).lean();
 
-    const populatedCart = await CartModel.findById(cart._id)
-      .populate("items.product_id", "name price SKUName images")
-      .lean();
+    const itemsWithProductDetails = await Promise.all(
+      rawCart.items.map(async (item) => {
+        const product = await ProductModel.findById(item.product_id).lean();
+        return {
+          ...item,
+          productDetails: product || null,
+        };
+      })
+    );
+
+    const cartWithProductDetails = {
+      ...rawCart,
+      items: itemsWithProductDetails,
+    };
 
     return res
       .status(200)
-      .json(new ApiResponse(200, populatedCart, "Cart updated successfully"));
+      .json(
+        new ApiResponse(
+          200,
+          cartWithProductDetails,
+          "Cart updated successfully"
+        )
+      );
   } catch (error) {
     console.error("Error in addToCart:", error);
     return res
@@ -296,7 +312,8 @@ const addToCart = async (req, res) => {
 
 const updateCart = async (req, res) => {
   try {
-    const { user_id, product_id, tiffinMenuId, day, quantity, type } = req.body;
+    const { user_id, product_id, skuId, tiffinMenuId, day, quantity, type } =
+      req.body;
 
     if (
       quantity === undefined ||
@@ -321,15 +338,22 @@ const updateCart = async (req, res) => {
     }
 
     if (type === "product") {
-      if (!product_id) {
+      if (!product_id && !skuId) {
         return res
           .status(400)
-          .json(new ApiError(400, "Product ID is required"));
+          .json(new ApiError(400, "Product ID or SKU ID is required"));
       }
 
-      const itemIndex = cart.items.findIndex(
-        (item) => item.product_id.toString() === product_id
-      );
+      let itemIndex = -1;
+      if (skuId) {
+        itemIndex = cart.items.findIndex(
+          (item) => item.sku?.skuId?.toString() === skuId
+        );
+      } else {
+        itemIndex = cart.items.findIndex(
+          (item) => item.product_id.toString() === product_id
+        );
+      }
 
       if (itemIndex === -1) {
         return res

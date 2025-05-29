@@ -5,8 +5,8 @@ const {
   getProductById,
   RelatedProducts,
   EditProduct,
+  HomePageProduct,
 } = require("../controllers/Product.controller");
-const upload = require("../middlewares/Multer.middleware");
 
 const ProductRoute = express.Router();
 
@@ -15,5 +15,6 @@ ProductRoute.post("/create", CreateProduct);
 ProductRoute.get("/:id", getProductById);
 ProductRoute.post("/category/related", RelatedProducts);
 ProductRoute.put("/category/:id", EditProduct);
+ProductRoute.get("/category/home", HomePageProduct);
 
 module.exports = ProductRoute;

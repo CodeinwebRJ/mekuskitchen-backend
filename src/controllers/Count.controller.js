@@ -15,14 +15,16 @@ const Counts = async (req, res) => {
 
     let CartItemCount = 0;
 
-    if (cart.items.length > 0) {
+    if (cart?.items?.length > 0) {
       const productItemsCount =
         cart.items?.reduce((acc, item) => acc + item.quantity, 0) || 0;
       CartItemCount = productItemsCount;
     } else {
-      const tiffinItemsCount =
-        cart.tiffins?.reduce((acc, item) => acc + item.quantity, 0) || 0;
-      CartItemCount = tiffinItemsCount;
+      if (cart?.items?.tiffin > 0) {
+        const tiffinItemsCount =
+          cart.tiffins?.reduce((acc, item) => acc + item.quantity, 0) || 0;
+        CartItemCount = tiffinItemsCount;
+      }
     }
 
     const WishListItemCount = wishlist?.items?.length || 0;
