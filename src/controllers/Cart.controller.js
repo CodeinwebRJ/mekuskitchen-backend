@@ -3,11 +3,13 @@ const ApiResponse = require("../utils/ApiResponse");
 const CartModel = require("../models/Cart.model");
 const TiffinModel = require("../models/TiffinMenu.model");
 const ProductModel = require("../models/Product.model");
+const TaxModel = require("../models/Tax.model");
 const mongoose = require("mongoose");
 
 const getUserCart = async (req, res) => {
   try {
     const { userId } = req.params;
+    const { provinceCode } = req.query;
 
     if (!userId) {
       return res.status(400).json(new ApiError(400, "User ID is required"));
@@ -24,6 +26,9 @@ const getUserCart = async (req, res) => {
             items: [],
             tiffins: [],
             totalAmount: "0",
+            totalTax: "0",
+            grandTotal: "0",
+            taxBreakdown: [],
             createdAt: null,
             updatedAt: null,
           },
@@ -32,12 +37,49 @@ const getUserCart = async (req, res) => {
       );
     }
 
+    let taxConfig = null;
+    if (provinceCode) {
+      taxConfig = await TaxModel.findOne({
+        provinceCode,
+      });
+    }
+
+    let totalAmount = 0;
+    let totalTax = 0;
+    const taxBreakdown = [];
+
     const itemsWithDetails = await Promise.all(
       cart.items.map(async (item) => {
         const product = await ProductModel.findById(item.product_id);
+        const productDetails = product ? product.toObject() : null;
+
+        const price = productDetails?.sellingPrice || 0;
+        const quantity = item.quantity || 1;
+
+        let itemTax = 0;
+
+        if (productDetails && productDetails.category && taxConfig) {
+          const categoryTax = taxConfig?.taxes?.find(
+            (t) => t.category === productDetails.category
+          );
+          if (categoryTax) {
+            itemTax = (price * quantity * categoryTax.taxRate) / 100;
+            totalTax += itemTax;
+            taxBreakdown.push({
+              type: "product",
+              category: productDetails.taxCategory,
+              taxRate: categoryTax.taxRate,
+              taxAmount: itemTax.toFixed(2),
+            });
+          }
+        }
+
+        totalAmount += price * quantity;
+
         return {
           ...item.toObject(),
-          productDetails: product ? product.toObject() : null,
+          productDetails,
+          itemTax: itemTax.toFixed(2),
         };
       })
     );
@@ -45,9 +87,34 @@ const getUserCart = async (req, res) => {
     const tiffinsWithDetails = await Promise.all(
       cart.tiffins.map(async (tiffin) => {
         const tiffinMenu = await TiffinModel.findById(tiffin.tiffinMenuId);
+        const tiffinMenuDetails = tiffinMenu ? tiffinMenu.toObject() : null;
+
+        const price = tiffinMenuDetails?.price || 0;
+        const quantity = tiffin.quantity || 1;
+
+        let tiffinTax = 0;
+        if (tiffinMenuDetails && tiffinMenuDetails.taxCategory && taxConfig) {
+          const categoryTax = taxConfig.taxes.find(
+            (t) => t.category === tiffinMenuDetails.taxCategory
+          );
+          if (categoryTax) {
+            tiffinTax = (price * quantity * categoryTax.taxRate) / 100;
+            totalTax += tiffinTax;
+            taxBreakdown.push({
+              type: "tiffin",
+              category: tiffinMenuDetails.taxCategory,
+              taxRate: categoryTax.taxRate,
+              taxAmount: tiffinTax.toFixed(2),
+            });
+          }
+        }
+
+        totalAmount += price * quantity;
+
         return {
           ...tiffin.toObject(),
-          tiffinMenuDetails: tiffinMenu ? tiffinMenu.toObject() : null,
+          tiffinMenuDetails,
+          tiffinTax: tiffinTax.toFixed(2),
         };
       })
     );
@@ -56,13 +123,17 @@ const getUserCart = async (req, res) => {
       ...cart.toObject(),
       items: itemsWithDetails,
       tiffins: tiffinsWithDetails,
+      totalAmount: totalAmount.toFixed(2),
+      totalTax: totalTax.toFixed(2),
+      grandTotal: (totalAmount + totalTax).toFixed(2),
+      taxBreakdown,
     };
 
     return res
       .status(200)
       .json(new ApiResponse(200, enrichedCart, "Cart retrieved successfully"));
   } catch (error) {
-    console.error(error);
+    console.error("getUserCart error:", error);
     return res
       .status(500)
       .json(new ApiError(500, "Internal Server Error", [error.message]));

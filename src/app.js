@@ -11,6 +11,7 @@ const ContactRoute = require("./routes/Contact.route");
 const WishlistRoute = require("./routes/Wishlist.route");
 const CountRoute = require("./routes/Count.route");
 const CouponRoute = require("./routes/Coupon.route");
+const TaxRoute = require("./routes/Tax.Route");
 require("dotenv").config();
 
 const app = express();
@@ -40,5 +41,7 @@ app.use("/api/v1/contact", ContactRoute);
 app.use("/api/v1/wishlist", WishlistRoute);
 app.use("/api/v1/C", CountRoute);
 app.use("/api/v1/coupon", CouponRoute);
+app.use("/api/v1/tax", TaxRoute);
+
 
 module.exports = app;

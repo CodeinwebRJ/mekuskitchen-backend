@@ -101,6 +101,7 @@ const getTopRatedProducts = async (req, res) => {
           _id: "$product_id",
           averageRating: { $avg: "$rating" },
           totalReviews: { $sum: 1 },
+          tailings: { $sum: 1 },
         },
       },
       {
@@ -150,6 +151,7 @@ const getTopRatedProducts = async (req, res) => {
             },
             title: "$productDetails.name",
             description: "$productDetails.description",
+            category: "$productDetails.category", // Added category field
           },
         },
       },

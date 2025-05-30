@@ -26,6 +26,7 @@ const getAllProducts = async (req, res) => {
       ProductCategory,
       brand,
       ratings,
+      price,
     } = req.body;
 
     if (!page || !limit) {
@@ -76,6 +77,24 @@ const getAllProducts = async (req, res) => {
       if (filtered.length > 0) {
         query.brand = { $in: filtered };
       }
+    }
+
+    // Add price filter
+    if (Array.isArray(price) && price.length === 2) {
+      const [minPrice, maxPrice] = price.map((p) => parseFloat(p));
+      if (!isNaN(minPrice) && !isNaN(maxPrice) && minPrice <= maxPrice) {
+        query.price = { $gte: minPrice, $lte: maxPrice };
+      } else {
+        return res
+          .status(400)
+          .json(new ApiError(400, "Invalid price range provided"));
+      }
+    } else if (price) {
+      return res
+        .status(400)
+        .json(
+          new ApiError(400, "Price must be an array with min and max values")
+        );
     }
 
     let pipeline = [
@@ -186,6 +205,7 @@ const CreateProduct = async (req, res) => {
       shortDescription,
       stock,
       sizes,
+      discount,
       dietaryPreference,
       category,
       subCategory,
@@ -288,6 +308,7 @@ const CreateProduct = async (req, res) => {
       price,
       currency,
       images,
+      discount: discount || 0,
       SKUName,
       sellingPrice: sellingPrice || null,
       description: description || null,

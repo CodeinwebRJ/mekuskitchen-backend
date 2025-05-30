@@ -7,16 +7,16 @@ const getUserAddress = async (req, res) => {
     const { userId } = req.params;
     const addresses = await AddressModel.find({ user: userId });
 
-    if (!addresses.length) {
-      return res
-        .status(404)
-        .json(new ApiResponse(200, [], "No addresses found for this user"));
-    }
-
     return res
       .status(200)
       .json(
-        new ApiResponse(200, addresses, "Addresses retrieved successfully")
+        new ApiResponse(
+          200,
+          addresses,
+          addresses.length
+            ? "Addresses retrieved successfully"
+            : "No addresses found for this user"
+        )
       );
   } catch (error) {
     return res
