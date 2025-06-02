@@ -101,7 +101,6 @@ const getTopRatedProducts = async (req, res) => {
           _id: "$product_id",
           averageRating: { $avg: "$rating" },
           totalReviews: { $sum: 1 },
-          tailings: { $sum: 1 },
         },
       },
       {
@@ -135,6 +134,7 @@ const getTopRatedProducts = async (req, res) => {
           totalReviews: 1,
           _id: 0,
           productDetails: {
+            _id: "$productDetails._id", // Added product _id
             product_name: "$productDetails.name",
             price: "$productDetails.price",
             image_url: {
@@ -151,7 +151,7 @@ const getTopRatedProducts = async (req, res) => {
             },
             title: "$productDetails.name",
             description: "$productDetails.description",
-            category: "$productDetails.category", // Added category field
+            category: "$productDetails.category", // Retained from previous request
           },
         },
       },

@@ -76,56 +76,52 @@ const getOrderById = async (req, res) => {
 
 const getAllOrders = async (req, res) => {
   try {
-    const {
-      startDate,
-      endDate,
-      specificDate,
-      dateRange, // e.g., 'today', 'yesterday', 'last7days', 'thisMonth'
-    } = req.body;
+    const { startDate, endDate, specificDate, dateRange } = req.params;
+
+    const page = parseInt(req.query.page) || 1; 
+    const limit = parseInt(req.query.limit) || 10; 
+    const skip = (page - 1) * limit;
 
     let filter = {};
-
     if (startDate || endDate || specificDate || dateRange) {
-      filter.Orderdate = {};
+      let dateFilter = {};
 
-      // Specific date filter
       if (specificDate) {
         const date = new Date(specificDate);
-        filter.Orderdate = {
+        dateFilter = {
           $gte: new Date(date.setHours(0, 0, 0, 0)),
           $lte: new Date(date.setHours(23, 59, 59, 999)),
         };
-      }
-      // Date range filter
-      else if (startDate || endDate) {
-        if (startDate) filter.Orderdate.$gte = new Date(startDate);
-        if (endDate) filter.Orderdate.$lte = new Date(endDate);
-      }
-      // Predefined date ranges
-      else if (dateRange) {
+      } else if (startDate || endDate) {
+        if (startDate) dateFilter.$gte = new Date(startDate);
+        if (endDate) dateFilter.$lte = new Date(endDate);
+      } else if (dateRange) {
         const now = new Date();
         switch (dateRange.toLowerCase()) {
           case "today":
-            filter.Orderdate = {
+            dateFilter = {
               $gte: new Date(now.setHours(0, 0, 0, 0)),
               $lte: new Date(now.setHours(23, 59, 59, 999)),
             };
             break;
           case "yesterday":
-            const yesterday = new Date(now.setDate(now.getDate() - 1));
-            filter.Orderdate = {
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            dateFilter = {
               $gte: new Date(yesterday.setHours(0, 0, 0, 0)),
               $lte: new Date(yesterday.setHours(23, 59, 59, 999)),
             };
             break;
           case "last7days":
-            filter.Orderdate = {
-              $gte: new Date(now.setDate(now.getDate() - 7)),
+            const sevenDaysAgo = new Date();
+            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+            dateFilter = {
+              $gte: sevenDaysAgo,
               $lte: new Date(),
             };
             break;
           case "thismonth":
-            filter.Orderdate = {
+            dateFilter = {
               $gte: new Date(now.getFullYear(), now.getMonth(), 1),
               $lte: new Date(),
             };
@@ -134,13 +130,32 @@ const getAllOrders = async (req, res) => {
             break;
         }
       }
+
+      if (Object.keys(dateFilter).length > 0) {
+        filter.Orderdate = dateFilter;
+      }
     }
 
-    const orders = await OrderModel.find(filter).sort({ Orderdate: -1 });
+    const totalOrders = await OrderModel.countDocuments(filter);
 
-    return res
-      .status(200)
-      .json(new ApiResponse(200, orders, "All orders fetched successfully"));
+    const orders = await OrderModel.find(filter)
+      .sort({ Orderdate: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          totalOrders,
+          totalPages: Math.ceil(totalOrders / limit),
+          currentPage: page,
+          pageSize: limit,
+          orders,
+        },
+        "Orders fetched with pagination"
+      )
+    );
   } catch (error) {
     console.error("Get all orders error:", error);
     return res.status(500).json(new ApiError(500, "Internal server error"));
@@ -258,7 +273,7 @@ const cancelOrder = async (req, res) => {
     console.error("Cancel order error:", error);
     return res.status(500).json(new ApiError(500, "Internal server error"));
   }
-};
+};  
 
 module.exports = {
   createOrder,

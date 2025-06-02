@@ -5,8 +5,18 @@ const CategoryModel = require("../models/Category.model");
 
 const getAllCoupons = async (req, res) => {
   try {
-    const { page, limit, isActive, discountType, sortBy, sortOrder, expired } =
-      req.query;
+    const {
+      page = 1,
+      limit = 10,
+      isActive,
+      discountType,
+      sortBy = "createdAt",
+      sortOrder = "desc",
+      expired,
+      category,
+      subCategory,
+      productCategory,
+    } = req.query;
 
     const query = {};
     if (isActive !== undefined) {
@@ -29,34 +39,59 @@ const getAllCoupons = async (req, res) => {
       query.discountType = discountType;
     }
 
-    if (expired !== "true") {
+    if (expired === "true") {
+      query.expiresAt = { $lt: new Date() };
+    } else if (expired === "false") {
       query.$or = [{ expiresAt: { $gte: new Date() } }, { expiresAt: null }];
     }
+    if (category) {
+      query.category = { $in: Array.isArray(category) ? category : [category] };
+    }
+    if (subCategory) {
+      query.subCategory = {
+        $in: Array.isArray(subCategory) ? subCategory : [subCategory],
+      };
+    }
+    if (productCategory) {
+      query.ProductCategory = {
+        $in: Array.isArray(productCategory)
+          ? productCategory
+          : [productCategory],
+      };
+    }
 
-    const pageNum = parseInt(page);
-    const limitNum = parseInt(limit);
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
 
     if (isNaN(pageNum) || pageNum < 1) {
-      return res.status(400).json({
-        success: false,
-        message: "Page number must be a positive integer",
-      });
+      return res
+        .status(400)
+        .json(new ApiError(400, "Page number must be a positive integer"));
     }
 
-    if (isNaN(limitNum) || limitNum < 1 || limitNum > 100) {
-      return res.status(400).json({
-        success: false,
-        message: "Limit must be a positive integer not exceeding 100",
-      });
+    if (isNaN(limitNum) || limitNum < 1 || limitNum > 50) {
+      return res
+        .status(400)
+        .json(
+          new ApiError(400, "Limit must be a positive integer not exceeding 50")
+        );
     }
 
-    const validSortFields = ["createdAt", "discountValue", "expiresAt", "code"];
+    const validSortFields = [
+      "createdAt",
+      "discountValue",
+      "expiresAt",
+      "code",
+      "name",
+    ];
     const sortField = validSortFields.includes(sortBy) ? sortBy : "createdAt";
     const sortDirection = sortOrder.toLowerCase() === "asc" ? 1 : -1;
 
     const [coupons, totalCount] = await Promise.all([
       CouponModel.find(query)
-        .select("-__v")
+        .select(
+          "name code discountType discountValue minOrderAmount startAt expiresAt usageLimit usedCount image termsAndConditions description isActive category subCategory ProductCategory"
+        )
         .sort({ [sortField]: sortDirection })
         .skip((pageNum - 1) * limitNum)
         .limit(limitNum)
@@ -64,23 +99,23 @@ const getAllCoupons = async (req, res) => {
       CouponModel.countDocuments(query),
     ]);
 
-    const response = {
-      data: {
-        coupons: coupons || [],
-        pagination: {
-          currentPage: pageNum,
-          totalPages: Math.ceil(totalCount / limitNum) || 1,
-          totalItems: totalCount,
-          limit: limitNum,
-          hasNextPage: pageNum < Math.ceil(totalCount / limitNum),
-          hasPreviousPage: pageNum > 1,
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          coupons,
+          pagination: {
+            currentPage: pageNum,
+            totalPages: Math.ceil(totalCount / limitNum) || 1,
+            totalItems: totalCount,
+            limit: limitNum,
+            hasNextPage: pageNum < Math.ceil(totalCount / limitNum),
+            hasPreviousPage: pageNum > 1,
+          },
         },
-      },
-    };
-
-    return res
-      .status(200)
-      .json(new ApiResponse(200, response, "Coupons fetched successfully"));
+        "Coupons fetched successfully"
+      )
+    );
   } catch (error) {
     console.error("Error in getAllCoupons:", error);
     return res.status(500).json(new ApiError(500, "Internal server error"));
@@ -325,7 +360,6 @@ const CreateCoupons = async (req, res) => {
         );
     }
 
-    // Helper function to validate and trim category-like arrays
     const validateStringArray = (arr, fieldName) => {
       if (arr !== undefined) {
         if (!Array.isArray(arr)) {
@@ -743,19 +777,17 @@ const DeleteCoupons = async (req, res) => {
       return res.status(400).json(new ApiError(400, "Coupon ID is required"));
     }
 
-    if (!couponId.match(/^[0-9a-fA-F]{24}$/)) {
+    if (!couponId) {
       return res
         .status(400)
         .json(new ApiError(400, "Invalid Coupon ID format"));
     }
 
-    const coupon = await CouponModel.findById(couponId);
-    if (!coupon) {
+    const deletedCoupon = await CouponModel.findByIdAndDelete(couponId);
+
+    if (!deletedCoupon) {
       return res.status(404).json(new ApiError(404, "Coupon not found"));
     }
-
-    coupon.isActive = false;
-    await coupon.save();
 
     return res
       .status(200)

@@ -805,6 +805,38 @@ const EditProduct = async (req, res) => {
 
 const HomePageProduct = async (req, res) => {
   try {
+    const Category = await ProductModel.aggregate([
+      { $match: { isActive: true } },
+      {
+        $group: {
+          _id: "$category",
+          product: { $first: "$$ROOT" },
+        },
+      },
+      { $sample: { size: 6 } },
+      {
+        $replaceRoot: { newRoot: "$product" },
+      },
+    ]);
+    let additionalProducts = [];
+    if (Category.length < 6) {
+      const additionalCount = 6 - Category.length;
+      const usedCategories = Category.map((item) => item.category);
+      additionalProducts = await ProductModel.aggregate([
+        {
+          $match: {
+            isActive: true,
+            category: { $nin: usedCategories },
+          },
+        },
+        { $sample: { size: additionalCount } },
+      ]);
+    }
+    const finalCategoryProducts = [...Category, ...additionalProducts].slice(
+      0,
+      6
+    );
+
     const OurProduct = await ProductModel.aggregate([
       { $match: { isActive: true } },
       { $sample: { size: 5 } },
@@ -819,16 +851,15 @@ const HomePageProduct = async (req, res) => {
       .json(
         new ApiResponse(
           200,
-          { OurProduct, NewProducts },
+          { Category: finalCategoryProducts, OurProduct, NewProducts },
           "Product data fetched"
         )
       );
   } catch (error) {
     console.error("Error fetching home page products:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Server error while fetching products",
-    });
+    return res
+      .status(500)
+      .json(new ApiError(500, "Server error while fetching products"));
   }
 };
 
