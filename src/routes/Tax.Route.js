@@ -9,7 +9,7 @@ const TaxRoute = express.Router();
 
 TaxRoute.get("/get", getTaxRate);
 TaxRoute.post("/", CreateTax);
-TaxRoute.put("/edit/:provinceCode", EditTax);
-TaxRoute.delete("/delete/:provinceCode", DeleteTax);
+TaxRoute.put("/edit", EditTax);
+TaxRoute.delete("/delete", DeleteTax);
 
 module.exports = TaxRoute;

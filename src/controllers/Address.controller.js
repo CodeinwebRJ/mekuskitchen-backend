@@ -1,6 +1,7 @@
 const ApiError = require("../utils/ApiError");
 const ApiResponse = require("../utils/ApiResponse");
 const AddressModel = require("../models/Address.model");
+const axios = require("axios");
 
 const getUserAddress = async (req, res) => {
   try {
@@ -256,10 +257,40 @@ const ActiveAddress = async (req, res) => {
   }
 };
 
+const SuggestAddress = async (req, res) => {
+  try {
+    const { search } = req.query;
+
+    if (!search) {
+      return res.status(400).json({ error: "Missing 'search' parameter" });
+    }
+
+    const response = await axios.get(
+      "https://ws1.postescanada-canadapost.ca/AddressComplete/Interactive/Find/v2.10/json3.ws",
+      {
+        params: {
+          Key: process.env.CANADA_ADDRESS_KEY,
+          SearchTerm: search,
+          Country: "CAN",
+          LanguagePreference: "EN",
+        },
+      }
+    );
+
+    return res.json(response.data.Items);
+  } catch (error) {
+    console.error("Canada Post SuggestAddress Error:", error.message);
+    return res
+      .status(500)
+      .json({ error: "Failed to fetch address suggestions" });
+  }
+};
+
 module.exports = {
   getUserAddress,
   createAddress,
   updateAddress,
   deleteAddress,
   ActiveAddress,
+  SuggestAddress,
 };

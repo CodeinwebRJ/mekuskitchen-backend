@@ -4,16 +4,48 @@ const ApiResponse = require("../utils/ApiResponse");
 
 const getTaxRate = async (req, res) => {
   const { provinceCode, category } = req.query;
-
-  if (!provinceCode || !category) {
-    return res
-      .status(400)
-      .json(new ApiError(400, "provinceCode and category are required"));
-  }
-
-  const categories = Array.isArray(category) ? category : [category];
-
   try {
+    if (!provinceCode && !category) {
+      const allConfigs = await TaxModel.find({});
+      return res
+        .status(200)
+        .json(
+          new ApiResponse(200, allConfigs, "All tax configurations retrieved")
+        );
+    }
+
+    if (provinceCode && !category) {
+      const config = await TaxModel.findOne({ provinceCode });
+
+      if (!config) {
+        return res
+          .status(404)
+          .json(
+            new ApiError(
+              404,
+              `No tax configuration found for province code: ${provinceCode}`
+            )
+          );
+      }
+
+      return res
+        .status(200)
+        .json(
+          new ApiResponse(
+            200,
+            config,
+            `Tax configuration retrieved for province: ${provinceCode}`
+          )
+        );
+    }
+
+    if (!provinceCode || !category) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "provinceCode and category are required"));
+    }
+
+    const categories = Array.isArray(category) ? category : [category];
     const config = await TaxModel.findOne({ provinceCode });
 
     if (!config) {
@@ -28,7 +60,9 @@ const getTaxRate = async (req, res) => {
     }
 
     const results = categories.map((cat) => {
-      const found = config.taxes.find((t) => t.category === cat);
+      const found = config.taxes.find(
+        (t) => t.category.toLowerCase() === cat.toLowerCase()
+      );
       return {
         category: cat,
         taxRate: found ? found.taxRate : null,
@@ -88,8 +122,7 @@ const CreateTax = async (req, res) => {
 };
 
 const EditTax = async (req, res) => {
-  const { provinceCode } = req.params;
-  const { provinceName, taxes } = req.body;
+  const { provinceCode, provinceName, taxes } = req.body;
 
   if (!provinceCode) {
     return res
@@ -124,7 +157,7 @@ const EditTax = async (req, res) => {
 };
 
 const DeleteTax = async (req, res) => {
-  const { provinceCode } = req.params;
+  const { provinceCode } = req.query;
 
   if (!provinceCode) {
     return res
