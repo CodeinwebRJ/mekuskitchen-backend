@@ -34,7 +34,7 @@ const OrderSchema = new mongoose.Schema({
   deliveryTime: {
     type: Date,
   },
-  totalAmount: {
+  cartAmount: {
     type: Number,
   },
   discount: {
@@ -46,11 +46,17 @@ const OrderSchema = new mongoose.Schema({
   taxAmount: {
     type: Number,
   },
+  grandTotal: {
+    type: Number,
+  },
   discountAmount: {
     type: Number,
   },
   notes: {
     type: String,
+  },
+  cartItems: {
+    type: Array,
   },
   Orderdate: {
     type: Date,

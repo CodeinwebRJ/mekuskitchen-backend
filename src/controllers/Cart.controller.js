@@ -39,9 +39,7 @@ const getUserCart = async (req, res) => {
 
     let taxConfig = null;
     if (provinceCode) {
-      taxConfig = await TaxModel.findOne({
-        provinceCode,
-      });
+      taxConfig = await TaxModel.findOne({ provinceCode });
     }
 
     let totalAmount = 0;
@@ -53,7 +51,7 @@ const getUserCart = async (req, res) => {
         const product = await ProductModel.findById(item.product_id);
         const productDetails = product ? product.toObject() : null;
 
-        const price = productDetails?.sellingPrice || 0;
+        const price = item.price || 0;
         const quantity = item.quantity || 1;
 
         let itemTax = 0;
@@ -89,8 +87,7 @@ const getUserCart = async (req, res) => {
         const tiffinMenu = await TiffinModel.findById(tiffin.tiffinMenuId);
         const tiffinMenuDetails = tiffinMenu ? tiffinMenu.toObject() : null;
 
-        const price = tiffinMenuDetails?.price || 0;
-        const quantity = tiffin.quantity || 1;
+        const tiffinTotal = parseFloat(tiffin.totalAmount || 0);
 
         let tiffinTax = 0;
         if (tiffinMenuDetails && tiffinMenuDetails.taxCategory && taxConfig) {
@@ -98,7 +95,7 @@ const getUserCart = async (req, res) => {
             (t) => t.category === tiffinMenuDetails.taxCategory
           );
           if (categoryTax) {
-            tiffinTax = (price * quantity * categoryTax.taxRate) / 100;
+            tiffinTax = (tiffinTotal * categoryTax.taxRate) / 100;
             totalTax += tiffinTax;
             taxBreakdown.push({
               type: "tiffin",
@@ -109,7 +106,7 @@ const getUserCart = async (req, res) => {
           }
         }
 
-        totalAmount += price * quantity;
+        totalAmount += tiffinTotal;
 
         return {
           ...tiffin.toObject(),
@@ -280,7 +277,6 @@ const addToCart = async (req, res) => {
             );
         }
 
-        // Check if SKU item already in cart
         const itemIndex = cart.items.findIndex((item) => {
           const isSameProduct =
             item.product_id.toString() === product_id.toString();
@@ -340,6 +336,7 @@ const addToCart = async (req, res) => {
       (sum, item) => sum + (item.price || 0) * (item.quantity || 0),
       0
     );
+
     const tiffinTotal = cart.tiffins.reduce(
       (sum, tiffin) => sum + parseFloat(tiffin.totalAmount || 0),
       0
@@ -358,7 +355,6 @@ const addToCart = async (req, res) => {
         };
       })
     );
-
     const cartWithProductDetails = {
       ...rawCart,
       items: itemsWithProductDetails,

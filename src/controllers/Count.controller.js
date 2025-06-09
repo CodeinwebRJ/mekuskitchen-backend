@@ -11,16 +11,17 @@ const Counts = async (req, res) => {
     const { id } = req.params;
 
     const cart = await CartModel.findOne({ user: id });
+    
     const wishlist = await WishlistModel.findOne({ userid: id });
-
+    
     let CartItemCount = 0;
-
+    
     if (cart?.items?.length > 0) {
       const productItemsCount =
         cart.items?.reduce((acc, item) => acc + item.quantity, 0) || 0;
       CartItemCount = productItemsCount;
     } else {
-      if (cart?.items?.tiffin > 0) {
+      if (cart?.tiffins.length > 0) {
         const tiffinItemsCount =
           cart.tiffins?.reduce((acc, item) => acc + item.quantity, 0) || 0;
         CartItemCount = tiffinItemsCount;
