@@ -11,11 +11,11 @@ const Counts = async (req, res) => {
     const { id } = req.params;
 
     const cart = await CartModel.findOne({ user: id });
-    
+
     const wishlist = await WishlistModel.findOne({ userid: id });
-    
+
     let CartItemCount = 0;
-    
+
     if (cart?.items?.length > 0) {
       const productItemsCount =
         cart.items?.reduce((acc, item) => acc + item.quantity, 0) || 0;
@@ -365,6 +365,7 @@ const UploadImages = async (req, res) => {
     const uploadPromises = imageFiles.map((file) =>
       uploadToCloudinary(file.path)
     );
+
     const uploadResults = await Promise.all(uploadPromises);
 
     const uploadedImages = uploadResults.map((result, index) => ({

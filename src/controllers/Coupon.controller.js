@@ -425,51 +425,24 @@ const CreateCoupons = async (req, res) => {
 
     let parsedStartAt = undefined;
     if (startAt) {
-      const datePattern = /^(\d{2})-(\d{2})-(\d{4})$/;
-      if (!datePattern.test(startAt)) {
+      parsedStartAt = new Date(startAt);
+      if (isNaN(parsedStartAt.getTime())) {
         return res
           .status(400)
           .json(
-            new ApiError(400, "Invalid startAt date format. Use DD-MM-YYYY")
-          );
-      }
-      const [day, month, year] = startAt.split("-").map(Number);
-      parsedStartAt = new Date(year, month - 1, day);
-      if (
-        isNaN(parsedStartAt.getTime()) ||
-        parsedStartAt.getFullYear() !== year
-      ) {
-        return res
-          .status(400)
-          .json(
-            new ApiError(400, "Invalid startAt date. Check format and values.")
+            new ApiError(400, "Invalid startAt date format. Use ISO format.")
           );
       }
     }
 
     let parsedExpiresAt = undefined;
     if (expiresAt) {
-      const datePattern = /^(\d{2})-(\d{2})-(\d{4})$/;
-      if (!datePattern.test(expiresAt)) {
+      parsedExpiresAt = new Date(expiresAt);
+      if (isNaN(parsedExpiresAt.getTime())) {
         return res
           .status(400)
           .json(
-            new ApiError(400, "Invalid expiresAt date format. Use DD-MM-YYYY")
-          );
-      }
-      const [day, month, year] = expiresAt.split("-").map(Number);
-      parsedExpiresAt = new Date(year, month - 1, day);
-      if (
-        isNaN(parsedExpiresAt.getTime()) ||
-        parsedExpiresAt.getFullYear() !== year
-      ) {
-        return res
-          .status(400)
-          .json(
-            new ApiError(
-              400,
-              "Invalid expiresAt date. Check format and values."
-            )
+            new ApiError(400, "Invalid expiresAt date format. Use ISO format.")
           );
       }
       if (parsedStartAt && parsedExpiresAt <= parsedStartAt) {
@@ -525,19 +498,9 @@ const CreateCoupons = async (req, res) => {
 
     await coupon.save();
 
-    const couponData = coupon.toObject();
-    if (couponData.startAt) {
-      const startDate = new Date(couponData.startAt);
-      couponData.startAt = startDate.toLocaleDateString("en-GB");
-    }
-    if (couponData.expiresAt) {
-      const expiresDate = new Date(couponData.expiresAt);
-      couponData.expiresAt = expiresDate.toLocaleDateString("en-GB");
-    }
-
     return res
       .status(201)
-      .json(new ApiResponse(201, couponData, "Coupon created successfully"));
+      .json(new ApiResponse(201, coupon, "Coupon created successfully"));
   } catch (error) {
     console.error("Create coupon error:", error);
     const statusCode = error instanceof ApiError ? error.statusCode : 500;

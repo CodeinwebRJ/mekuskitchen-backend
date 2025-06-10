@@ -99,6 +99,15 @@ const CreateTax = async (req, res) => {
       );
   }
 
+  // Validate for duplicate categories in taxes array
+  const categories = taxes.map((tax) => tax.category.toLowerCase());
+  const uniqueCategories = new Set(categories);
+  if (categories.length !== uniqueCategories.size) {
+    return res
+      .status(400)
+      .json(new ApiError(400, "Duplicate category names are not allowed"));
+  }
+
   try {
     const existing = await TaxModel.findOne({ provinceCode });
     if (existing) {
@@ -128,6 +137,17 @@ const EditTax = async (req, res) => {
     return res
       .status(400)
       .json(new ApiError(400, "provinceCode is required in params"));
+  }
+
+  // Validate for duplicate categories in taxes array
+  if (taxes) {
+    const categories = taxes.map((tax) => tax.category.toLowerCase());
+    const uniqueCategories = new Set(categories);
+    if (categories.length !== uniqueCategories.size) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "Duplicate category names are not allowed"));
+    }
   }
 
   try {
