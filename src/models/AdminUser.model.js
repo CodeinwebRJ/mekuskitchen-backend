@@ -2,6 +2,10 @@ const mongoose = require("mongoose");
 
 const adminSchema = new mongoose.Schema(
   {
+    uniqueId: {
+      type: String,
+      unique: true,
+    },
     name: {
       type: String,
       required: true,
@@ -11,8 +15,6 @@ const adminSchema = new mongoose.Schema(
       type: String,
       required: true,
       unique: true,
-      lowercase: true,
-      trim: true,
     },
     password: {
       type: String,
@@ -24,11 +26,20 @@ const adminSchema = new mongoose.Schema(
       trim: true,
     },
     avatar: {
-      type: String, 
+      type: String,
+    },
+    lastLogin: {
+      type: Date,
     },
   },
   {
     timestamps: true,
+    toJSON: {
+      transform: (doc, ret) => {
+        delete ret.password;
+        return ret;
+      },
+    },
   }
 );
 

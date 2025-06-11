@@ -38,23 +38,23 @@ const CartSchema = new mongoose.Schema(
           min: 1,
         },
         price: {
-          type: Number, // Changed to Number for calculations
+          type: Number, 
           required: true,
           min: 0,
         },
         sku: {
           skuId: {
-            type: mongoose.Schema.Types.ObjectId, // Reference to the SKU's _id
+            type: mongoose.Schema.Types.ObjectId, 
           },
           name: {
-            type: String, // e.g., "Iphone 16 black"
+            type: String, 
           },
           skuName: {
-            type: String, // e.g., "black-15"
+            type: String, 
           },
           images: [
             {
-              type: String, // Store SKU-specific images
+              type: String,
             },
           ],
         },
