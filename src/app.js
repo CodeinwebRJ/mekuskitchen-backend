@@ -12,6 +12,8 @@ const WishlistRoute = require("./routes/Wishlist.route");
 const CountRoute = require("./routes/Count.route");
 const CouponRoute = require("./routes/Coupon.route");
 const TaxRoute = require("./routes/Tax.Route");
+const PaymentRoute = require("./routes/Payment.route");
+const AdminUserRoute = require("./routes/AdminUser.model");
 require("dotenv").config();
 
 const app = express();
@@ -42,6 +44,7 @@ app.use("/api/v1/wishlist", WishlistRoute);
 app.use("/api/v1/C", CountRoute);
 app.use("/api/v1/coupon", CouponRoute);
 app.use("/api/v1/tax", TaxRoute);
-
+app.use("/api/v1/payment", PaymentRoute);
+app.use("/api/v1/admin", AdminUserRoute);
 
 module.exports = app;

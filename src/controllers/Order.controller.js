@@ -71,7 +71,7 @@ const createOrder = async (req, res) => {
       $set: {
         items: [],
         tiffins: [],
-        totalAmount: 0, // Change to cartAmount if your schema uses that
+        totalAmount: 0,
       },
     });
 
