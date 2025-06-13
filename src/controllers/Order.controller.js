@@ -9,6 +9,7 @@ const createOrder = async (req, res) => {
     const {
       userId,
       cartId,
+      orderId,
       addressId,
       paymentMethod,
       cartAmount,
@@ -19,7 +20,14 @@ const createOrder = async (req, res) => {
       deliveryTime,
     } = req.body;
 
-    if (!userId || !cartId || !addressId || !cartAmount || !paymentMethod) {
+    if (
+      !userId ||
+      !orderId ||
+      !cartId ||
+      !addressId ||
+      !cartAmount ||
+      !paymentMethod
+    ) {
       return res
         .status(400)
         .json(
@@ -52,6 +60,7 @@ const createOrder = async (req, res) => {
     const newOrder = await OrderModel.create({
       userId,
       cartId,
+      orderId,
       addressId,
       paymentMethod,
       paymentStatus: "Pending",

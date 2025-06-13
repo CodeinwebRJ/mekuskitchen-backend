@@ -535,7 +535,7 @@ const EditProduct = async (req, res) => {
       return res.status(400).json(new ApiError(400, "Product ID is required"));
     }
 
-    const existingName = await ProductModel.findOne({ name: name.trim() });
+    const existingName = await ProductModel.findOne({ name });
     if (existingName) {
       return res
         .status(409)

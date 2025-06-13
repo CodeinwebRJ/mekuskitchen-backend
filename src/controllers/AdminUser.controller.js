@@ -89,7 +89,6 @@ const SendOtp = async (req, res) => {
     }
 
     const otp = generateOTP();
-    console.log(otp);
 
     const htmlContent = `
       <h2>OTP for Password Reset</h2>

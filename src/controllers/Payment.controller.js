@@ -68,7 +68,7 @@ const CreatePayment = async (req, res) => {
 
     const receipt = parsed.response.receipt;
 
-    await PaymentModel.create({
+    const paymentRes = await PaymentModel.create({
       userId: userId,
       orderId: orderId,
       transactionId: receipt.TransID || null,
@@ -83,7 +83,7 @@ const CreatePayment = async (req, res) => {
 
     return res
       .status(200)
-      .json(new ApiResponse(200, receipt, "Payment processed"));
+      .json(new ApiResponse(200, paymentRes, "Payment processed"));
   } catch (error) {
     console.error("Payment error:", error.message);
     return res.status(500).json(new ApiError(500, "Payment failed"));
