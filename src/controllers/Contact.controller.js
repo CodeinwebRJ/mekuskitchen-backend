@@ -41,4 +41,22 @@ const sendQuary = async (req, res) => {
   }
 };
 
-module.exports = { sendQuary };
+const getAllQuarys = async (req, res) => {
+  try {
+    const contacts = await ContactModel.find().sort({ createdAt: -1 });
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          contacts,
+          "All contact queries fetched successfully"
+        )
+      );
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json(new ApiError(500, "Internal Server Error"));
+  }
+};
+
+module.exports = { sendQuary, getAllQuarys };

@@ -2,6 +2,7 @@ const ApiResponse = require("../utils/ApiResponse");
 const ApiError = require("../utils/ApiError");
 const ProductModel = require("../models/Product.model");
 const TiffinModel = require("../models/TiffinMenu.model");
+const ReviewModel = require("../models/Review.model");
 const { uploadToCloudinary } = require("../utils/Cloudinary.utils");
 const fs = require("fs");
 const mongoose = require("mongoose");
@@ -27,6 +28,7 @@ const getAllProducts = async (req, res) => {
       brand,
       ratings,
       price,
+      isActive,
     } = req.body;
 
     if (!page || !limit) {
@@ -36,8 +38,9 @@ const getAllProducts = async (req, res) => {
     }
 
     const skip = (page - 1) * limit;
-
     let query = {};
+
+    // Search filter
     if (search) {
       const sanitizedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       query.$or = [
@@ -51,6 +54,7 @@ const getAllProducts = async (req, res) => {
     const sanitizeArray = (arr) =>
       arr.filter((item) => typeof item === "string" && item.trim() !== "");
 
+    // Category filter
     if (Array.isArray(category)) {
       const filtered = sanitizeArray(category);
       if (filtered.length > 0) {
@@ -79,7 +83,16 @@ const getAllProducts = async (req, res) => {
       }
     }
 
-    // Add price filter
+    if (typeof isActive === "boolean") {
+      query.isActive = isActive;
+    } else if (typeof isActive === "string") {
+      if (isActive.toLowerCase() === "true") {
+        query.isActive = false;
+      } else if (isActive.toLowerCase() === "false") {
+        query.isActive = true;
+      }
+    }
+
     if (Array.isArray(price) && price.length === 2) {
       const [minPrice, maxPrice] = price.map((p) => parseFloat(p));
       if (!isNaN(minPrice) && !isNaN(maxPrice) && minPrice <= maxPrice) {
@@ -125,6 +138,7 @@ const getAllProducts = async (req, res) => {
       },
     ];
 
+    // Ratings filter
     if (Array.isArray(ratings) && ratings.length > 0) {
       const validRatings = ratings
         .map((rating) => parseFloat(rating))
@@ -138,6 +152,7 @@ const getAllProducts = async (req, res) => {
       }
     }
 
+    // Remove unwanted fields
     pipeline.push({
       $project: {
         productIdStr: 0,
@@ -146,6 +161,7 @@ const getAllProducts = async (req, res) => {
       },
     });
 
+    // Sort
     let sortStage = {};
     if (sortBy) {
       switch (sortBy.toLowerCase()) {
@@ -170,6 +186,7 @@ const getAllProducts = async (req, res) => {
       pipeline.push({ $sort: sortStage });
     }
 
+    // Pagination
     pipeline.push({ $skip: skip }, { $limit: parseInt(limit) });
 
     const products = await ProductModel.aggregate(pipeline).exec();
@@ -846,15 +863,40 @@ const HomePageProduct = async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(5);
 
-    return res
-      .status(200)
-      .json(
-        new ApiResponse(
-          200,
-          { Category: finalCategoryProducts, OurProduct, NewProducts },
-          "Product data fetched"
-        )
+    const TopReviewsRaw = await ReviewModel.find({ rating: { $gte: 4 } })
+      .sort({ rating: -1, createdAt: -1 })
+      .limit(5)
+      .lean();
+
+    const productIds = TopReviewsRaw.map((r) => r.product_id);
+
+    const productsMap = await ProductModel.find({ _id: { $in: productIds } })
+      .select("name image")
+      .lean()
+      .then((products) =>
+        products.reduce((acc, product) => {
+          acc[product._id.toString()] = product;
+          return acc;
+        }, {})
       );
+
+    const TopReviews = TopReviewsRaw.map((review) => ({
+      ...review,
+      product: productsMap[review.product_id] || null,
+    }));
+
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          Category: finalCategoryProducts,
+          OurProduct,
+          NewProducts,
+          TopReviews,
+        },
+        "Product data fetched"
+      )
+    );
   } catch (error) {
     console.error("Error fetching home page products:", error);
     return res

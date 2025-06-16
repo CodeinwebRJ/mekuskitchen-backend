@@ -11,7 +11,14 @@ const generateOrderId = () => {
   return trimmed + random;
 };
 
-const buildXmlRequest = (orderId, amount, pan, expdate, cryptType = "7") => {
+const buildXmlRequest = (
+  orderId,
+  amount,
+  pan,
+  expdate,
+  cvv,
+  cryptType = "7"
+) => {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <request>
   <store_id>${process.env.MONERIS_STORE_ID}</store_id>
@@ -23,6 +30,10 @@ const buildXmlRequest = (orderId, amount, pan, expdate, cryptType = "7") => {
     <pan>${pan}</pan>
     <expdate>${expdate}</expdate>
     <crypt_type>${cryptType}</crypt_type>
+    <cvd_info>
+      <cvd_indicator>1</cvd_indicator>
+      <cvd_value>${cvv}</cvd_value>
+    </cvd_info>
   </purchase>
 </request>`;
 };
@@ -43,14 +54,28 @@ const buildRefundXml = (orderId, amount, txnNumber) => {
 
 const CreatePayment = async (req, res) => {
   try {
-    const { userId, amount, cardNumber, expiryDate } = req.body;
+    const { userId, amount, cardNumber, expiryDate, cvv } = req.body;
 
-    if (!amount || !cardNumber || !expiryDate) {
+    console.log(req.body)
+    if (!amount || !cardNumber || !expiryDate || !cvv) {
       return res.status(400).json(new ApiError(400, "Missing payment data"));
     }
 
+    let expdate = expiryDate.replace(/\D/g, "");
+    if (expdate.length === 4) {
+      const mm = expdate.slice(0, 2);
+      const yy = expdate.slice(2, 4);
+      expdate = yy + mm;
+    }
+
     const orderId = generateOrderId();
-    const xmlPayload = buildXmlRequest(orderId, amount, cardNumber, expiryDate);
+    const xmlPayload = buildXmlRequest(
+      orderId,
+      amount,
+      cardNumber,
+      expdate,
+      cvv
+    );
 
     const monerisResponse = await axios.post(
       process.env.MONERIS_API_URL,
@@ -69,13 +94,13 @@ const CreatePayment = async (req, res) => {
     const receipt = parsed.response.receipt;
 
     const paymentRes = await PaymentModel.create({
-      userId: userId,
-      orderId: orderId,
+      userId,
+      orderId,
       transactionId: receipt.TransID || null,
       paymentMethod: "card",
       cardType: receipt.CardType || null,
       amount: parseFloat(amount),
-      status: receipt.ResponseCode === "027" ? "success" : "failed",
+      status: parseInt(receipt.ResponseCode) < 50 ? "success" : "failed",
       responseCode: receipt.ResponseCode,
       message: receipt.Message,
       rawResponse: receipt,
@@ -85,7 +110,7 @@ const CreatePayment = async (req, res) => {
       .status(200)
       .json(new ApiResponse(200, paymentRes, "Payment processed"));
   } catch (error) {
-    console.error("Payment error:", error.message);
+    console.error("Payment error:", error?.response?.data || error.message);
     return res.status(500).json(new ApiError(500, "Payment failed"));
   }
 };
