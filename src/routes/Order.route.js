@@ -12,7 +12,7 @@ const OrderRoute = express.Router();
 OrderRoute.get("/admin/orders", getAllOrders);
 OrderRoute.post("/", createOrder);
 OrderRoute.post("/:id", getOrderById);
-OrderRoute.post("/users/:userId", getOrdersByUser);
+OrderRoute.post("/user/:userId", getOrdersByUser);
 OrderRoute.put("/status/:id", updateOrderStatus);
 OrderRoute.post("/cancel/:id", cancelOrder);
 

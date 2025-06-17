@@ -97,7 +97,7 @@ const getOrderById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+    if (!id) {
       return res
         .status(400)
         .json(new ApiError(400, "Invalid or missing order ID"));

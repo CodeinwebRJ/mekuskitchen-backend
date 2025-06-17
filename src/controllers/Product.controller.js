@@ -38,9 +38,8 @@ const getAllProducts = async (req, res) => {
     }
 
     const skip = (page - 1) * limit;
-    let query = {};
 
-    // Search filter
+    const query = {};
     if (search) {
       const sanitizedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       query.$or = [
@@ -52,62 +51,40 @@ const getAllProducts = async (req, res) => {
     }
 
     const sanitizeArray = (arr) =>
-      arr.filter((item) => typeof item === "string" && item.trim() !== "");
+      Array.isArray(arr)
+        ? arr.filter((item) => typeof item === "string" && item.trim())
+        : [];
 
-    // Category filter
-    if (Array.isArray(category)) {
-      const filtered = sanitizeArray(category);
-      if (filtered.length > 0) {
-        query.category = { $in: filtered };
-      }
-    }
+    const filters = {
+      category: sanitizeArray(category),
+      subCategory: sanitizeArray(subCategory),
+      ProductCategory: sanitizeArray(ProductCategory),
+      brand: sanitizeArray(brand),
+    };
 
-    if (Array.isArray(subCategory)) {
-      const filtered = sanitizeArray(subCategory);
-      if (filtered.length > 0) {
-        query.subCategory = { $in: filtered };
+    Object.keys(filters).forEach((key) => {
+      if (filters[key].length) {
+        query[key] = { $in: filters[key] };
       }
-    }
-
-    if (Array.isArray(ProductCategory)) {
-      const filtered = sanitizeArray(ProductCategory);
-      if (filtered.length > 0) {
-        query.ProductCategory = { $in: filtered };
-      }
-    }
-
-    if (Array.isArray(brand)) {
-      const filtered = sanitizeArray(brand);
-      if (filtered.length > 0) {
-        query.brand = { $in: filtered };
-      }
-    }
+    });
 
     if (typeof isActive === "boolean") {
       query.isActive = isActive;
     } else if (typeof isActive === "string") {
-      if (isActive.toLowerCase() === "true") {
-        query.isActive = false;
-      } else if (isActive.toLowerCase() === "false") {
-        query.isActive = true;
-      }
+      const val = isActive.toLowerCase();
+      if (val === "true") query.isActive = true;
+      else if (val === "false") query.isActive = false;
     }
 
     if (Array.isArray(price) && price.length === 2) {
-      const [minPrice, maxPrice] = price.map((p) => parseFloat(p));
-      if (!isNaN(minPrice) && !isNaN(maxPrice) && minPrice <= maxPrice) {
-        query.price = { $gte: minPrice, $lte: maxPrice };
+      const [min, max] = price.map(Number);
+      if (!isNaN(min) && !isNaN(max) && min <= max) {
+        query.price = { $gte: min, $lte: max };
       } else {
         return res
           .status(400)
           .json(new ApiError(400, "Invalid price range provided"));
       }
-    } else if (price) {
-      return res
-        .status(400)
-        .json(
-          new ApiError(400, "Price must be an array with min and max values")
-        );
     }
 
     let pipeline = [
@@ -138,21 +115,21 @@ const getAllProducts = async (req, res) => {
       },
     ];
 
-    // Ratings filter
     if (Array.isArray(ratings) && ratings.length > 0) {
       const validRatings = ratings
-        .map((rating) => parseFloat(rating))
-        .filter((rating) => !isNaN(rating) && rating >= 0 && rating <= 5);
-      if (validRatings.length > 0) {
+        .map(Number)
+        .filter((r) => !isNaN(r) && r >= 0 && r <= 5);
+
+      if (validRatings.length) {
+        const minRating = Math.min(...validRatings);
         pipeline.push({
           $match: {
-            averageRating: { $in: validRatings },
+            averageRating: { $gte: minRating },
           },
         });
       }
     }
 
-    // Remove unwanted fields
     pipeline.push({
       $project: {
         productIdStr: 0,
@@ -161,48 +138,45 @@ const getAllProducts = async (req, res) => {
       },
     });
 
-    // Sort
-    let sortStage = {};
-    if (sortBy) {
-      switch (sortBy.toLowerCase()) {
-        case "high-to-low":
-          sortStage = { price: -1 };
-          break;
-        case "low-to-high":
-          sortStage = { price: 1 };
-          break;
-        case "sortbyaverageratings":
-          sortStage = { averageRating: -1 };
-          break;
-        case "sortbylatest":
-          sortStage = { createdAt: -1 };
-          break;
-        default:
-          sortStage = { createdAt: -1 };
-      }
+    const sortStage = {};
+    switch (sortBy?.toLowerCase()) {
+      case "high-to-low":
+        sortStage.price = -1;
+        break;
+      case "low-to-high":
+        sortStage.price = 1;
+        break;
+      case "sortbyaverageratings":
+        sortStage.averageRating = -1;
+        break;
+      case "sortbylatest":
+        sortStage.createdAt = -1;
+        break;
+      default:
+        sortStage.createdAt = -1;
     }
+    pipeline.push({ $sort: sortStage });
 
-    if (Object.keys(sortStage).length > 0) {
-      pipeline.push({ $sort: sortStage });
-    }
+    const countPipeline = [...pipeline, { $count: "total" }];
+    const countResult = await ProductModel.aggregate(countPipeline).exec();
+    const total = countResult.length ? countResult[0].total : 0;
 
-    // Pagination
     pipeline.push({ $skip: skip }, { $limit: parseInt(limit) });
 
-    const products = await ProductModel.aggregate(pipeline).exec();
-    const totalProducts = await ProductModel.countDocuments(query);
+    const products = await ProductModel.aggregate(pipeline);
 
-    const resData = {
+    const response = {
       success: true,
-      total: totalProducts,
+      total,
       page,
-      pages: Math.ceil(totalProducts / limit),
-      data: products || [],
+      limit,
+      pages: Math.ceil(total / limit),
+      data: products,
     };
 
     res
       .status(200)
-      .json(new ApiResponse(200, resData, "Fetched Data Successfully"));
+      .json(new ApiResponse(200, response, "Fetched Data Successfully"));
   } catch (error) {
     console.error("Error in getAllProducts:", error);
     res
@@ -373,7 +347,42 @@ const getProductById = async (req, res) => {
         .json(new ApiError(400, "Invalid Product ID format"));
     }
 
-    const product = await ProductModel.findById(id);
+    const productAggregation = await ProductModel.aggregate([
+      { $match: { _id: new mongoose.Types.ObjectId(id) } },
+      {
+        $addFields: {
+          productIdStr: { $toString: "$_id" },
+        },
+      },
+      {
+        $lookup: {
+          from: "reviews",
+          localField: "productIdStr",
+          foreignField: "product_id",
+          as: "reviews",
+        },
+      },
+      {
+        $addFields: {
+          averageRating: {
+            $cond: {
+              if: { $gt: [{ $size: "$reviews" }, 0] },
+              then: { $avg: "$reviews.rating" },
+              else: 0,
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          productIdStr: 0,
+          reviews: 0,
+          __v: 0,
+        },
+      },
+    ]);
+
+    const product = productAggregation[0];
 
     if (!product) {
       return res.status(404).json(new ApiError(404, "Product not found"));
