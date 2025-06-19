@@ -18,22 +18,27 @@ const createOrder = async (req, res) => {
       taxAmount = 0,
       notes = "",
       deliveryTime,
+      selfPickup,
     } = req.body;
 
-    if (
-      !userId ||
-      !orderId ||
-      !cartId ||
-      !addressId ||
-      !cartAmount ||
-      !paymentMethod
-    ) {
+    if (!userId || !orderId || !cartId || !cartAmount || !paymentMethod) {
       return res
         .status(400)
         .json(
           new ApiError(
             400,
             "Missing required fields: userId, cartId, addressId, paymentMethod, and cartAmount are required"
+          )
+        );
+    }
+
+    if (!addressId && !selfPickup) {
+      return res
+        .status(400)
+        .json(
+          new ApiError(
+            400,
+            "Either addressId must be provided or selfPickup must be true"
           )
         );
     }
@@ -61,7 +66,7 @@ const createOrder = async (req, res) => {
       userId,
       cartId,
       orderId,
-      addressId,
+      addressId: addressId || "",
       paymentMethod,
       paymentStatus: "Pending",
       orderStatus: "Pending",
@@ -72,6 +77,7 @@ const createOrder = async (req, res) => {
       taxAmount,
       grandTotal,
       notes,
+      selfPickup: selfPickup ?? false,
       cartItems: cartItemsWithProducts,
       Orderdate: new Date(),
     });

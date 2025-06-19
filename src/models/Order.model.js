@@ -14,7 +14,6 @@ const OrderSchema = new mongoose.Schema({
   },
   addressId: {
     type: String,
-    required: true,
   },
   paymentMethod: {
     type: String,
@@ -60,6 +59,10 @@ const OrderSchema = new mongoose.Schema({
   },
   cartItems: {
     type: Array,
+  },
+  selfPickup: {
+    type: Boolean,
+    default: false,
   },
   Orderdate: {
     type: Date,

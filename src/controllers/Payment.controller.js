@@ -56,11 +56,11 @@ const CreatePayment = async (req, res) => {
   try {
     const { userId, amount, cardNumber, expiryDate, cvv } = req.body;
 
-    console.log(req.body);
     if (!amount || !cardNumber || !expiryDate || !cvv) {
       return res.status(400).json(new ApiError(400, "Missing payment data"));
     }
 
+    let cleanedCardNumber = cardNumber.replace(/\s/g, "").replace(/\D/g, "");
     let expdate = expiryDate.replace(/\D/g, "");
     if (expdate.length === 4) {
       const mm = expdate.slice(0, 2);
@@ -68,11 +68,12 @@ const CreatePayment = async (req, res) => {
       expdate = yy + mm;
     }
 
+    console.log(expdate, cleanedCardNumber);
     const orderId = generateOrderId();
     const xmlPayload = buildXmlRequest(
       orderId,
       amount,
-      cardNumber,
+      cleanedCardNumber,
       expdate,
       cvv
     );
@@ -93,6 +94,7 @@ const CreatePayment = async (req, res) => {
 
     const receipt = parsed.response.receipt;
 
+    console.log(receipt);
     const paymentRes = await PaymentModel.create({
       userId,
       orderId,
