@@ -87,34 +87,6 @@ const getAllProducts = async (req, res) => {
       }
     }
 
-    let pipeline = [
-      { $match: query },
-      {
-        $addFields: {
-          productIdStr: { $toString: "$_id" },
-        },
-      },
-      {
-        $lookup: {
-          from: "reviews",
-          localField: "productIdStr",
-          foreignField: "product_id",
-          as: "reviews",
-        },
-      },
-      {
-        $addFields: {
-          averageRating: {
-            $cond: {
-              if: { $gt: [{ $size: "$reviews" }, 0] },
-              then: { $avg: "$reviews.rating" },
-              else: 0,
-            },
-          },
-        },
-      },
-    ];
-
     if (Array.isArray(ratings) && ratings.length > 0) {
       const validRatings = ratings
         .map(Number)
@@ -122,22 +94,11 @@ const getAllProducts = async (req, res) => {
 
       if (validRatings.length) {
         const minRating = Math.min(...validRatings);
-        pipeline.push({
-          $match: {
-            averageRating: { $gte: minRating },
-          },
-        });
+        query.avrageRating = { $gte: minRating };
       }
     }
 
-    pipeline.push({
-      $project: {
-        productIdStr: 0,
-        __v: 0,
-        reviews: 0,
-      },
-    });
-
+    // 📌 Build sort stage
     const sortStage = {};
     switch (sortBy?.toLowerCase()) {
       case "high-to-low":
@@ -147,7 +108,7 @@ const getAllProducts = async (req, res) => {
         sortStage.price = 1;
         break;
       case "sortbyaverageratings":
-        sortStage.averageRating = -1;
+        sortStage.avrageRating = -1;
         break;
       case "sortbylatest":
         sortStage.createdAt = -1;
@@ -155,15 +116,13 @@ const getAllProducts = async (req, res) => {
       default:
         sortStage.createdAt = -1;
     }
-    pipeline.push({ $sort: sortStage });
 
-    const countPipeline = [...pipeline, { $count: "total" }];
-    const countResult = await ProductModel.aggregate(countPipeline).exec();
-    const total = countResult.length ? countResult[0].total : 0;
-
-    pipeline.push({ $skip: skip }, { $limit: parseInt(limit) });
-
-    const products = await ProductModel.aggregate(pipeline);
+    const total = await ProductModel.countDocuments(query);
+    const products = await ProductModel.find(query)
+      .sort(sortStage)
+      .skip(skip)
+      .limit(parseInt(limit))
+      .select("-__v");
 
     const response = {
       success: true,
@@ -347,42 +306,7 @@ const getProductById = async (req, res) => {
         .json(new ApiError(400, "Invalid Product ID format"));
     }
 
-    const productAggregation = await ProductModel.aggregate([
-      { $match: { _id: new mongoose.Types.ObjectId(id) } },
-      {
-        $addFields: {
-          productIdStr: { $toString: "$_id" },
-        },
-      },
-      {
-        $lookup: {
-          from: "reviews",
-          localField: "productIdStr",
-          foreignField: "product_id",
-          as: "reviews",
-        },
-      },
-      {
-        $addFields: {
-          averageRating: {
-            $cond: {
-              if: { $gt: [{ $size: "$reviews" }, 0] },
-              then: { $avg: "$reviews.rating" },
-              else: 0,
-            },
-          },
-        },
-      },
-      {
-        $project: {
-          productIdStr: 0,
-          reviews: 0,
-          __v: 0,
-        },
-      },
-    ]);
-
-    const product = productAggregation[0];
+    const product = await ProductModel.findById(id).select("-__v");
 
     if (!product) {
       return res.status(404).json(new ApiError(404, "Product not found"));
@@ -413,34 +337,8 @@ const RelatedProducts = async (req, res) => {
         },
       },
       {
-        $addFields: {
-          productIdStr: { $toString: "$_id" },
-        },
-      },
-      {
-        $lookup: {
-          from: "reviews",
-          localField: "productIdStr",
-          foreignField: "product_id",
-          as: "reviews",
-        },
-      },
-      {
-        $addFields: {
-          averageRating: {
-            $cond: {
-              if: { $gt: [{ $size: "$reviews" }, 0] },
-              then: { $avg: "$reviews.rating" },
-              else: 0,
-            },
-          },
-        },
-      },
-      {
         $project: {
-          productIdStr: 0,
           __v: 0,
-          reviews: 0,
         },
       },
       { $sample: { size: 5 } },
@@ -455,34 +353,8 @@ const RelatedProducts = async (req, res) => {
           },
         },
         {
-          $addFields: {
-            productIdStr: { $toString: "$_id" },
-          },
-        },
-        {
-          $lookup: {
-            from: "reviews",
-            localField: "productIdStr",
-            foreignField: "product_id",
-            as: "reviews",
-          },
-        },
-        {
-          $addFields: {
-            averageRating: {
-              $cond: {
-                if: { $gt: [{ $size: "$reviews" }, 0] },
-                then: { $avg: "$reviews.rating" },
-                else: 0,
-              },
-            },
-          },
-        },
-        {
           $project: {
-            productIdStr: 0,
             __v: 0,
-            reviews: 0,
           },
         },
         { $sample: { size: 5 } },
@@ -839,14 +711,16 @@ const HomePageProduct = async (req, res) => {
           product: { $first: "$$ROOT" },
         },
       },
-      { $sample: { size: 6 } },
+      { $sample: { size: 10 } },
       {
         $replaceRoot: { newRoot: "$product" },
       },
     ]);
+
     let additionalProducts = [];
-    if (Category.length < 6) {
-      const additionalCount = 6 - Category.length;
+
+    if (Category.length < 10) {
+      const additionalCount = 10 - Category.length;
       const usedCategories = Category.map((item) => item.category);
       additionalProducts = await ProductModel.aggregate([
         {
@@ -858,19 +732,20 @@ const HomePageProduct = async (req, res) => {
         { $sample: { size: additionalCount } },
       ]);
     }
+
     const finalCategoryProducts = [...Category, ...additionalProducts].slice(
       0,
-      6
+      10
     );
 
     const OurProduct = await ProductModel.aggregate([
       { $match: { isActive: true } },
-      { $sample: { size: 5 } },
+      { $sample: { size: 10 } },
     ]);
 
     const NewProducts = await ProductModel.find({ isActive: true })
       .sort({ createdAt: -1 })
-      .limit(5);
+      .limit(10);
 
     const TopReviewsRaw = await ReviewModel.find({ rating: { $gte: 4 } })
       .sort({ rating: -1, createdAt: -1 })

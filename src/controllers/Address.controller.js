@@ -286,6 +286,33 @@ const SuggestAddress = async (req, res) => {
   }
 };
 
+const RetrieveAddressDetails = async (req, res) => {
+  try {
+    const { id } = req.query;
+
+    if (!id) {
+      return res.status(400).json({ error: "Missing 'id' parameter" });
+    }
+
+    const response = await axios.get(
+      "https://ws1.postescanada-canadapost.ca/AddressComplete/Interactive/Retrieve/v2.10/json3.ws",
+      {
+        params: {
+          Key: process.env.CANADA_ADDRESS_KEY,
+          Id: id, // Correct parameter
+        },
+      }
+    );
+
+    return res.json(response.data.Items);
+  } catch (error) {
+    console.error("Canada Post RetrieveAddressDetails Error:", error.message);
+    return res
+      .status(500)
+      .json({ error: "Failed to fetch full address details" });
+  }
+};
+
 module.exports = {
   getUserAddress,
   createAddress,
@@ -293,4 +320,5 @@ module.exports = {
   deleteAddress,
   ActiveAddress,
   SuggestAddress,
+  RetrieveAddressDetails,
 };

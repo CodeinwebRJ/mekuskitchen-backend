@@ -88,6 +88,10 @@ const ProductSchema = mongoose.Schema(
       type: Number,
       default: null,
     },
+    averageRating: {
+      type: Number,
+      default: 0,
+    },
     weightUnit: {
       type: String,
       default: null,

@@ -6,9 +6,9 @@ const PaymentModel = require("../models/Payment.model");
 
 const generateOrderId = () => {
   const now = Date.now().toString();
-  const trimmed = now.slice(-6);
-  const random = Math.floor(1000 + Math.random() * 9000);
-  return trimmed + random;
+  const trimmed = now.slice(-8);
+  const random = Math.floor(100000000 + Math.random() * 900000000);
+  return trimmed + random.toString();
 };
 
 const buildXmlRequest = (
@@ -56,7 +56,7 @@ const CreatePayment = async (req, res) => {
   try {
     const { userId, amount, cardNumber, expiryDate, cvv } = req.body;
 
-    console.log(req.body)
+    console.log(req.body);
     if (!amount || !cardNumber || !expiryDate || !cvv) {
       return res.status(400).json(new ApiError(400, "Missing payment data"));
     }

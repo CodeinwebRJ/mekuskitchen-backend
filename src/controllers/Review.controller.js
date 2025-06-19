@@ -1,6 +1,7 @@
 const ApiError = require("../utils/ApiError");
 const ApiResponse = require("../utils/ApiResponse");
 const ReviewModel = require("../models/Review.model");
+const ProductModel = require("../models/Product.model");
 
 const getAllReviews = async (req, res) => {
   try {
@@ -30,6 +31,7 @@ const getAllReviews = async (req, res) => {
 const addReviews = async (req, res) => {
   try {
     const { rating, comment, product_id, user_id } = req.body;
+
     if (!product_id) {
       return res.status(400).json(new ApiError(400, "Product ID is required"));
     }
@@ -49,11 +51,31 @@ const addReviews = async (req, res) => {
       comment,
     });
 
-    const savedReview = await review.save();
+    const result = await ReviewModel.aggregate([
+      {
+        $match: {
+          product_id: product_id.toString(),
+        },
+      },
+      {
+        $group: {
+          _id: "$product_id",
+          avgRating: { $avg: "$rating" },
+        },
+      },
+    ]);
+
+    const newAverageRating = result.length > 0 ? result[0].avgRating : 0;
+
+    await ProductModel.findByIdAndUpdate(
+      product_id,
+      { averageRating: newAverageRating },
+      { new: true }
+    );
 
     return res
       .status(201)
-      .json(new ApiResponse(201, savedReview, "Review added successfully"));
+      .json(new ApiResponse(201, review, "Review added successfully"));
   } catch (error) {
     console.log(error);
     return res
@@ -95,77 +117,9 @@ const deleteReviews = async (req, res) => {
 
 const getTopRatedProducts = async (req, res) => {
   try {
-    const topProducts = await ReviewModel.aggregate([
-      {
-        $group: {
-          _id: "$product_id",
-          averageRating: { $avg: "$rating" },
-          totalReviews: { $sum: 1 },
-        },
-      },
-      {
-        $sort: {
-          averageRating: -1,
-        },
-      },
-      {
-        $limit: 3,
-      },
-      {
-        $addFields: {
-          productObjectId: { $toObjectId: "$_id" },
-        },
-      },
-      {
-        $lookup: {
-          from: "products",
-          localField: "productObjectId",
-          foreignField: "_id",
-          as: "productDetails",
-        },
-      },
-      {
-        $unwind: "$productDetails",
-      },
-      {
-        $project: {
-          productId: "$_id",
-          averageRating: { $round: ["$averageRating", 2] },
-          totalReviews: 1,
-          _id: 0,
-          productDetails: {
-            _id: "$productDetails._id", // Added product _id
-            product_name: "$productDetails.name",
-            price: "$productDetails.price",
-            image_url: {
-              $arrayElemAt: [
-                {
-                  $filter: {
-                    input: "$productDetails.images",
-                    as: "image",
-                    cond: { $eq: ["$$image.isPrimary", true] },
-                  },
-                },
-                0,
-              ],
-            },
-            title: "$productDetails.name",
-            description: "$productDetails.description",
-            category: "$productDetails.category", // Retained from previous request
-          },
-        },
-      },
-      {
-        $addFields: {
-          "productDetails.image_url": {
-            $ifNull: [
-              "$productDetails.image_url.url",
-              { $arrayElemAt: ["$productDetails.images.url", 0] },
-            ],
-          },
-        },
-      },
-    ]);
+    const topProducts = await ProductModel.find({ isActive: true })
+      .sort({ averageRating: -1 })
+      .limit(3);
 
     res
       .status(200)
@@ -177,7 +131,7 @@ const getTopRatedProducts = async (req, res) => {
         )
       );
   } catch (error) {
-    console.error("Error fetching top products:", error);
+    console.error("Error fetching top-rated products:", error);
     res.status(500).json(new ApiError(500, "Internal Server Error"));
   }
 };
