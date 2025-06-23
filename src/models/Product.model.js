@@ -68,6 +68,10 @@ const ProductSchema = mongoose.Schema(
       type: String,
       trim: true,
     },
+    isTaxFree:{
+      type: Boolean,
+      default: false
+    },
     brand: {
       type: String,
       trim: true,

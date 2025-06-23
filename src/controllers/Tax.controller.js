@@ -3,8 +3,8 @@ const ApiError = require("../utils/ApiError");
 const ApiResponse = require("../utils/ApiResponse");
 
 const getTaxRate = async (req, res) => {
-  const { provinceCode, category } = req.query;
   try {
+    const { provinceCode, category } = req.query;
     if (!provinceCode && !category) {
       const allConfigs = await TaxModel.find({});
       return res
@@ -13,7 +13,6 @@ const getTaxRate = async (req, res) => {
           new ApiResponse(200, allConfigs, "All tax configurations retrieved")
         );
     }
-
     if (provinceCode && !category) {
       const config = await TaxModel.findOne({ provinceCode });
 
@@ -38,14 +37,16 @@ const getTaxRate = async (req, res) => {
           )
         );
     }
-
-    if (!provinceCode || !category) {
+    if (!provinceCode && category) {
       return res
         .status(400)
-        .json(new ApiError(400, "provinceCode and category are required"));
+        .json(
+          new ApiError(
+            400,
+            "provinceCode is required when querying by category"
+          )
+        );
     }
-
-    const categories = Array.isArray(category) ? category : [category];
     const config = await TaxModel.findOne({ provinceCode });
 
     if (!config) {
@@ -59,13 +60,17 @@ const getTaxRate = async (req, res) => {
         );
     }
 
+    const categories = Array.isArray(category) ? category : [category];
+
     const results = categories.map((cat) => {
       const found = config.taxes.find(
-        (t) => t.category.toLowerCase() === cat.toLowerCase()
+        (t) => t.category.toLowerCase() === cat.trim().toLowerCase()
       );
+
       return {
         category: cat,
-        taxRate: found ? found.taxRate : null,
+        provinceTax: found ? found.provinceTax : null,
+        federalTax: found ? found.federalTax : null,
         message: found
           ? "Tax rate retrieved successfully"
           : `No tax rate found for category: ${cat}`,
@@ -89,33 +94,60 @@ const getTaxRate = async (req, res) => {
 };
 
 const CreateTax = async (req, res) => {
-  const { provinceCode, provinceName, taxes } = req.body;
-
-  if (!provinceCode || !provinceName || !Array.isArray(taxes)) {
-    return res
-      .status(400)
-      .json(
-        new ApiError(400, "provinceCode, provinceName, and taxes are required")
-      );
-  }
-
-  // Validate for duplicate categories in taxes array
-  const categories = taxes.map((tax) => tax.category.toLowerCase());
-  const uniqueCategories = new Set(categories);
-  if (categories.length !== uniqueCategories.size) {
-    return res
-      .status(400)
-      .json(new ApiError(400, "Duplicate category names are not allowed"));
-  }
-
   try {
+    const { provinceCode, provinceName, taxes } = req.body;
+    if (!provinceCode || !provinceName || !Array.isArray(taxes)) {
+      return res
+        .status(400)
+        .json(
+          new ApiError(
+            400,
+            "provinceCode, provinceName, and taxes (as array) are required"
+          )
+        );
+    }
+
+    if (taxes.length === 0) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "Taxes array cannot be empty"));
+    }
+    for (const [index, tax] of taxes.entries()) {
+      if (
+        !tax.category ||
+        typeof tax.provinceTax !== "number" ||
+        typeof tax.federalTax !== "number"
+      ) {
+        return res
+          .status(400)
+          .json(
+            new ApiError(
+              400,
+              `Invalid tax object at index ${index}. Ensure category, provinceTax, and federalTax are valid.`
+            )
+          );
+      }
+    }
+    const lowerCategories = taxes.map((t) => t.category.trim().toLowerCase());
+    const hasDuplicates = lowerCategories.some(
+      (cat, i) => lowerCategories.indexOf(cat) !== i
+    );
+    if (hasDuplicates) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "Duplicate category names are not allowed"));
+    }
     const existing = await TaxModel.findOne({ provinceCode });
     if (existing) {
       return res
         .status(409)
-        .json(new ApiError(409, "Tax config already exists"));
+        .json(
+          new ApiError(
+            409,
+            "Tax configuration for this province already exists"
+          )
+        );
     }
-
     const newTax = new TaxModel({ provinceCode, provinceName, taxes });
     await newTax.save();
 
@@ -131,36 +163,70 @@ const CreateTax = async (req, res) => {
 };
 
 const EditTax = async (req, res) => {
-  const { provinceCode, provinceName, taxes } = req.body;
-
-  if (!provinceCode) {
-    return res
-      .status(400)
-      .json(new ApiError(400, "provinceCode is required in params"));
-  }
-
-  // Validate for duplicate categories in taxes array
-  if (taxes) {
-    const categories = taxes.map((tax) => tax.category.toLowerCase());
-    const uniqueCategories = new Set(categories);
-    if (categories.length !== uniqueCategories.size) {
+  try {
+    const { provinceCode, provinceName, taxes } = req.body;
+    if (!provinceCode) {
       return res
         .status(400)
-        .json(new ApiError(400, "Duplicate category names are not allowed"));
+        .json(new ApiError(400, "provinceCode is required in request body"));
     }
-  }
+    if (!provinceName && !taxes) {
+      return res
+        .status(400)
+        .json(
+          new ApiError(
+            400,
+            "At least one of provinceName or taxes must be provided for update"
+          )
+        );
+    }
+    if (taxes) {
+      if (!Array.isArray(taxes) || taxes.length === 0) {
+        return res
+          .status(400)
+          .json(new ApiError(400, "Taxes must be a non-empty array"));
+      }
+      for (const [i, tax] of taxes.entries()) {
+        if (
+          !tax.category ||
+          typeof tax.provinceTax !== "number" ||
+          typeof tax.federalTax !== "number"
+        ) {
+          return res
+            .status(400)
+            .json(
+              new ApiError(
+                400,
+                `Invalid tax object at index ${i}. All fields are required`
+              )
+            );
+        }
+      }
+      const categories = taxes.map((t) => t.category.trim().toLowerCase());
+      const hasDuplicates = categories.some(
+        (cat, i) => categories.indexOf(cat) !== i
+      );
+      if (hasDuplicates) {
+        return res
+          .status(400)
+          .json(new ApiError(400, "Duplicate category names are not allowed"));
+      }
+    }
+    const updateFields = {};
+    if (provinceName) updateFields.provinceName = provinceName;
+    if (taxes) updateFields.taxes = taxes;
 
-  try {
     const updatedTax = await TaxModel.findOneAndUpdate(
       { provinceCode },
-      { $set: { provinceName, taxes } },
+      { $set: updateFields },
       { new: true }
     );
 
     if (!updatedTax) {
-      return res.status(404).json(new ApiError(404, "Tax config not found"));
+      return res
+        .status(404)
+        .json(new ApiError(404, "Tax configuration not found"));
     }
-
     return res
       .status(200)
       .json(
@@ -177,19 +243,26 @@ const EditTax = async (req, res) => {
 };
 
 const DeleteTax = async (req, res) => {
-  const { provinceCode } = req.query;
-
-  if (!provinceCode) {
-    return res
-      .status(400)
-      .json(new ApiError(400, "provinceCode is required in params"));
-  }
-
   try {
+    const { provinceCode } = req.query;
+    if (!provinceCode) {
+      return res
+        .status(400)
+        .json(
+          new ApiError(400, "provinceCode is required in query parameters")
+        );
+    }
     const deleted = await TaxModel.findOneAndDelete({ provinceCode });
 
     if (!deleted) {
-      return res.status(404).json(new ApiError(404, "Tax config not found"));
+      return res
+        .status(404)
+        .json(
+          new ApiError(
+            404,
+            `Tax configuration for provinceCode '${provinceCode}' not found`
+          )
+        );
     }
 
     return res

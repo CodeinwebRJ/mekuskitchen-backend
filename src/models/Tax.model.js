@@ -2,7 +2,8 @@ const mongoose = require("mongoose");
 
 const categoryTaxSchema = new mongoose.Schema({
   category: { type: String, required: true },
-  taxRate: { type: Number, required: true },
+  provinceTax: { type: Number, required: true },
+  federalTax: { type: Number, required: true },
 });
 
 const taxSchema = new mongoose.Schema(

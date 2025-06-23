@@ -169,6 +169,7 @@ const CreateProduct = async (req, res) => {
       tags,
       images,
       SKUName,
+      isTaxFree,
       currency,
       aboutItem,
     } = req.body;
@@ -277,6 +278,7 @@ const CreateProduct = async (req, res) => {
       dimensions: dimensions || {},
       productDetail: validatedProductDetail || [],
       tags: tags || [],
+      isTaxFree: isTaxFree || false,
       aboutItem: aboutItem || [],
       isActive: true,
     });
