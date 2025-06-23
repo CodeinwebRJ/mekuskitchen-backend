@@ -126,13 +126,18 @@ const getOrderById = async (req, res) => {
 
 const getAllOrders = async (req, res) => {
   try {
-    const { startDate, endDate, specificDate, dateRange } = req.query;
+    const { startDate, endDate, specificDate, dateRange, orderStatus } =
+      req.query;
 
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
     let filter = {};
+    
+    if (orderStatus) {
+      filter.orderStatus = orderStatus;
+    }
 
     if (startDate || endDate || specificDate || dateRange) {
       let dateFilter = {};
@@ -193,26 +198,29 @@ const getAllOrders = async (req, res) => {
       }
     }
 
-    const totalOrders = await OrderModel.countDocuments(filter);
+    const total = await OrderModel.countDocuments(filter);
 
     const orders = await OrderModel.find(filter)
       .sort({ Orderdate: -1 })
       .skip(skip)
       .limit(limit);
 
-    return res.status(200).json(
-      new ApiResponse(
-        200,
-        {
-          totalOrders,
-          totalPages: Math.ceil(totalOrders / limit),
-          currentPage: page,
-          pageSize: limit,
-          orders,
-        },
-        "Orders fetched with pagination"
-      )
-    );
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          {
+            success: true,
+            total,
+            page: String(page),
+            limit: String(limit),
+            pages: Math.ceil(total / limit),
+            orders,
+          },
+          "Orders fetched successfully"
+        )
+      );
   } catch (error) {
     console.error("Get all orders error:", error);
     return res.status(500).json(new ApiError(500, "Internal server error"));

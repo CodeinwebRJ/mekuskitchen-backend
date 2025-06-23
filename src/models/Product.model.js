@@ -128,6 +128,12 @@ const ProductSchema = mongoose.Schema(
         trim: true,
       },
     ],
+    aboutItem: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
     isActive: {
       type: Boolean,
       default: true,

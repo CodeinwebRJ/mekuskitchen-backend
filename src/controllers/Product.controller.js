@@ -98,7 +98,6 @@ const getAllProducts = async (req, res) => {
       }
     }
 
-    // 📌 Build sort stage
     const sortStage = {};
     switch (sortBy?.toLowerCase()) {
       case "high-to-low":
@@ -171,6 +170,7 @@ const CreateProduct = async (req, res) => {
       images,
       SKUName,
       currency,
+      aboutItem,
     } = req.body;
 
     const existingName = await ProductModel.findOne({ name: name.trim() });
@@ -277,6 +277,7 @@ const CreateProduct = async (req, res) => {
       dimensions: dimensions || {},
       productDetail: validatedProductDetail || [],
       tags: tags || [],
+      aboutItem: aboutItem || [],
       isActive: true,
     });
 
