@@ -4,7 +4,6 @@ const WishlistModel = require("../models/Wishlist.model");
 const CountryModel = require("../models/Country.model");
 const ApiError = require("../utils/ApiError");
 const ApiResponse = require("../utils/ApiResponse");
-const { Country: CscCountry, State, City } = require("country-state-city");
 const { default: axios } = require("axios");
 const fs = require("fs").promises;
 
@@ -154,7 +153,7 @@ const getCities = async (req, res) => {
             }
           );
 
-          console.log(apiRes)
+          console.log(apiRes);
 
           if (apiRes.data && apiRes.data.data) {
             const cities = apiRes.data.data;

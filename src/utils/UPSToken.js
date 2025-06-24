@@ -1,3 +1,4 @@
+const { default: axios } = require("axios");
 const ApiError = require("./ApiError");
 
 const getUPSToken = async () => {
@@ -17,7 +18,9 @@ const getUPSToken = async () => {
       }
     );
 
-    return response.data.access_token;
+    const { access_token} = response.data;
+
+    return access_token;
   } catch (error) {
     console.log(error);
     throw new ApiError(400, "Failed to get UPS access token");

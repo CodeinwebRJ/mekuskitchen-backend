@@ -26,9 +26,10 @@ const getUserCart = async (req, res) => {
             items: [],
             tiffins: [],
             totalAmount: "0",
+            totalFederalTax: "0",
+            totalProvinceTax: "0",
             totalTax: "0",
             grandTotal: "0",
-            taxBreakdown: [],
             createdAt: null,
             updatedAt: null,
           },
@@ -43,8 +44,8 @@ const getUserCart = async (req, res) => {
     }
 
     let totalAmount = 0;
-    let totalTax = 0;
-    const taxBreakdown = [];
+    let totalFederalTax = 0;
+    let totalProvinceTax = 0;
 
     const itemsWithDetails = await Promise.all(
       cart.items.map(async (item) => {
@@ -53,31 +54,30 @@ const getUserCart = async (req, res) => {
 
         const price = item.price || 0;
         const quantity = item.quantity || 1;
+        const itemSubtotal = price * quantity;
 
-        let itemTax = 0;
+        let itemFederalTax = 0;
+        let itemProvinceTax = 0;
 
         if (productDetails && productDetails.category && taxConfig) {
           const categoryTax = taxConfig?.taxes?.find(
             (t) => t.category === productDetails.category
           );
           if (categoryTax) {
-            itemTax = (price * quantity * categoryTax.taxRate) / 100;
-            totalTax += itemTax;
-            taxBreakdown.push({
-              type: "product",
-              category: productDetails.taxCategory,
-              taxRate: categoryTax.taxRate,
-              taxAmount: itemTax.toFixed(2),
-            });
+            itemFederalTax = (itemSubtotal * categoryTax.federalTax) / 100;
+            itemProvinceTax = (itemSubtotal * categoryTax.provinceTax) / 100;
+
+            totalFederalTax += itemFederalTax;
+            totalProvinceTax += itemProvinceTax;
           }
         }
 
-        totalAmount += price * quantity;
+        totalAmount += itemSubtotal;
 
         return {
           ...item.toObject(),
           productDetails,
-          itemTax: itemTax.toFixed(2),
+          itemTax: (itemFederalTax + itemProvinceTax).toFixed(2),
         };
       })
     );
@@ -89,20 +89,19 @@ const getUserCart = async (req, res) => {
 
         const tiffinTotal = parseFloat(tiffin.totalAmount || 0);
 
-        let tiffinTax = 0;
+        let tiffinFederalTax = 0;
+        let tiffinProvinceTax = 0;
+
         if (tiffinMenuDetails && tiffinMenuDetails.taxCategory && taxConfig) {
-          const categoryTax = taxConfig.taxes.find(
+          const categoryTax = taxConfig?.taxes?.find(
             (t) => t.category === tiffinMenuDetails.taxCategory
           );
           if (categoryTax) {
-            tiffinTax = (tiffinTotal * categoryTax.taxRate) / 100;
-            totalTax += tiffinTax;
-            taxBreakdown.push({
-              type: "tiffin",
-              category: tiffinMenuDetails.taxCategory,
-              taxRate: categoryTax.taxRate,
-              taxAmount: tiffinTax.toFixed(2),
-            });
+            tiffinFederalTax = (tiffinTotal * categoryTax.federalTax) / 100;
+            tiffinProvinceTax = (tiffinTotal * categoryTax.provinceTax) / 100;
+
+            totalFederalTax += tiffinFederalTax;
+            totalProvinceTax += tiffinProvinceTax;
           }
         }
 
@@ -111,19 +110,22 @@ const getUserCart = async (req, res) => {
         return {
           ...tiffin.toObject(),
           tiffinMenuDetails,
-          tiffinTax: tiffinTax.toFixed(2),
+          tiffinTax: (tiffinFederalTax + tiffinProvinceTax).toFixed(2),
         };
       })
     );
+
+    const totalTax = totalFederalTax + totalProvinceTax;
 
     const enrichedCart = {
       ...cart.toObject(),
       items: itemsWithDetails,
       tiffins: tiffinsWithDetails,
       totalAmount: totalAmount.toFixed(2),
+      totalFederalTax: totalFederalTax.toFixed(2),
+      totalProvinceTax: totalProvinceTax.toFixed(2),
       totalTax: totalTax.toFixed(2),
       grandTotal: (totalAmount + totalTax).toFixed(2),
-      taxBreakdown,
     };
 
     return res
@@ -136,6 +138,7 @@ const getUserCart = async (req, res) => {
       .json(new ApiError(500, "Internal Server Error", [error.message]));
   }
 };
+
 
 const addToCart = async (req, res) => {
   try {

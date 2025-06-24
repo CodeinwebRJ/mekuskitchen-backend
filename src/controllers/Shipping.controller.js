@@ -1,108 +1,133 @@
 const ApiError = require("../utils/ApiError");
 const ApiResponse = require("../utils/ApiResponse");
 const ShippingModel = require("../models/Shipping.model");
+const getUPSToken = require("../utils/UPSToken");
+const { default: axios } = require("axios");
 
-const BASE_URL = process.env.UPS_BASE_URl;
+const BASE_URL =
+  process.env.UPS_ENV === "sandbox" ? "https://wwwcie.ups.com" : "";
 
 const CreateShipping = async (req, res) => {
   try {
-    const token = await getUPSToken();
+    const accessToken = await getUPSToken();
     const {
       shipper,
-      recipient,
-      packageDetails,
-      serviceCode = "03",
-      orderId,
+      shipTo,
+      shipFrom,
+      packages,
+      serviceCode,
+      shipmentDescription,
+      labelFormat,
+      customerContext,
     } = req.body;
 
-    const shipmentPayload = {
-      ShipmentRequest: {
-        Shipment: {
-          Shipper: {
-            Name: shipper.name,
-            AttentionName: shipper.attentionName,
-            ShipperNumber: process.env.UPS_ACCOUNT_NUMBER,
-            Address: shipper.address,
+    const response = await axios.post(
+      `${BASE_URL}/api/shipments/v1/ship`,
+      {
+        ShipmentRequest: {
+          Request: {
+            RequestOption: "nonvalidate",
+            TransactionReference: {
+              CustomerContext: customerContext || "Shipment",
+            },
           },
-          ShipTo: {
-            Name: recipient.name,
-            Address: recipient.address,
-          },
-          Service: {
-            Code: serviceCode,
-            Description: "UPS Ground",
-          },
-          Package: [
-            {
-              Packaging: { Code: packageDetails.packagingType || "02" },
-              Dimensions: {
-                UnitOfMeasurement: { Code: packageDetails.unit || "IN" },
-                Length: packageDetails.length,
-                Width: packageDetails.width,
-                Height: packageDetails.height,
-              },
-              PackageWeight: {
-                UnitOfMeasurement: { Code: packageDetails.weightUnit || "LBS" },
-                Weight: packageDetails.weight,
+          Shipment: {
+            Description: shipmentDescription || "Shipment created from app",
+            Shipper: {
+              Name: shipper.name,
+              AttentionName: shipper.attentionName,
+              ShipperNumber: process.env.UPS_SHIPPER_NUMBER,
+              Address: {
+                AddressLine: shipper.address.addressLine,
+                City: shipper.address.city,
+                StateProvinceCode: shipper.address.stateCode,
+                PostalCode: shipper.address.postalCode,
+                CountryCode: shipper.address.countryCode,
               },
             },
-          ],
-        },
-        LabelSpecification: {
-          LabelImageFormat: { Code: "GIF" },
+            ShipTo: {
+              Name: shipTo.name,
+              AttentionName: shipTo.attentionName,
+              Address: {
+                AddressLine: shipTo.address.addressLine,
+                City: shipTo.address.city,
+                StateProvinceCode: shipTo.address.stateCode,
+                PostalCode: shipTo.address.postalCode,
+                CountryCode: shipTo.address.countryCode,
+              },
+            },
+            ShipFrom: {
+              Name: shipFrom.name,
+              AttentionName: shipFrom.attentionName,
+              Address: {
+                AddressLine: shipFrom.address.addressLine,
+                City: shipFrom.address.city,
+                StateProvinceCode: shipFrom.address.stateCode,
+                PostalCode: shipFrom.address.postalCode,
+                CountryCode: shipFrom.address.countryCode,
+              },
+            },
+            PaymentInformation: {
+              ShipmentCharge: {
+                Type: "01", // Transportation charge
+                BillShipper: {
+                  AccountNumber: process.env.UPS_SHIPPER_NUMBER,
+                },
+              },
+            },
+            Service: {
+              Code: serviceCode || "11", // Default: UPS Standard
+              Description: "Shipping Service",
+            },
+            Package: packages.map((pkg) => ({
+              Description: pkg.description,
+              Packaging: {
+                Code: pkg.packagingCode || "02",
+              },
+              PackageWeight: {
+                UnitOfMeasurement: {
+                  Code: pkg.unit || "KGS",
+                },
+                Weight: pkg.weight,
+              },
+            })),
+          },
+          LabelSpecification: {
+            LabelImageFormat: {
+              Code: labelFormat || "GIF",
+            },
+          },
         },
       },
-    };
-
-    const upsResponse = await axios.post(
-      `${BASE_URL}/ship/v1/shipments`,
-      shipmentPayload,
       {
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
-          transId: `order_${Date.now()}`,
-          transactionSrc: "mekus",
+          transId: "trans-" + Date.now(),
+          transactionSrc: "myApp",
         },
       }
     );
 
-    const shipmentResult = upsResponse.data?.ShipmentResponse?.ShipmentResults;
-    const trackingNumber = shipmentResult?.ShipmentIdentificationNumber;
-    const labelImage =
-      shipmentResult?.PackageResults?.ShippingLabel?.GraphicImage;
+    const shipmentResult = response.data?.ShipmentResponse?.ShipmentResults;
 
-    const shipping = new ShippingModel({
-      orderId,
-      shipper,
-      recipient,
-      trackingNumber,
-      shipmentId: trackingNumber,
-      service: {
-        code: serviceCode,
-        description: "UPS Ground",
-      },
-      packageDetails,
-      labelFormat: "GIF",
-      labelImage,
+    if (!shipmentResult) {
+      throw new Error("Invalid response from UPS");
+    }
+
+    return res.status(200).json({
+      success: true,
+      trackingNumber: shipmentResult.ShipmentIdentificationNumber,
+      label: shipmentResult.PackageResults[0].ShippingLabel.GraphicImage,
+      format: shipmentResult.PackageResults[0].ShippingLabel.ImageFormat.Code,
     });
-
-    await shipping.save();
-
-    return res
-      .status(200)
-      .json(new ApiResponse(200, shipping, "Shipment created successfully"));
-  } catch (err) {
-    console.error(err.response?.data || err.message);
-    return res
-      .status(500)
-      .json(
-        new ApiError(
-          500,
-          "Internal Server Error",
-          err.response?.data || err.message
-        )
-      );
+  } catch (error) {
+    console.dir(error.response?.data || error, { depth: null });
+    return res.status(500).json({
+      success: false,
+      message: "Failed to create UPS shipment",
+      error: error.response?.data || error.message,
+    });
   }
 };
 

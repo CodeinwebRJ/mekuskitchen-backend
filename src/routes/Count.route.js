@@ -5,6 +5,7 @@ const {
   getCountryData,
   getStateData,
   getCities,
+  UPSShipping,
 } = require("../controllers/Count.controller");
 const upload = require("../middlewares/Multer.middleware");
 const CountRoute = express.Router();
