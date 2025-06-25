@@ -7,7 +7,7 @@ const { default: axios } = require("axios");
 const BASE_URL =
   process.env.UPS_ENV === "sandbox" ? "https://wwwcie.ups.com" : "";
 
-const CreateShipping = async (req, res) => {
+const getShippingCharges = async (req, res) => {
   try {
     const accessToken = await getUPSToken();
     const {
@@ -26,7 +26,7 @@ const CreateShipping = async (req, res) => {
       {
         ShipmentRequest: {
           Request: {
-            RequestOption: "nonvalidate",
+            RequestOption: "rate",
             TransactionReference: {
               CustomerContext: customerContext || "Shipment",
             },
@@ -108,26 +108,20 @@ const CreateShipping = async (req, res) => {
         },
       }
     );
-
     const shipmentResult = response.data?.ShipmentResponse?.ShipmentResults;
 
     if (!shipmentResult) {
-      throw new Error("Invalid response from UPS");
+      return res.status(400).json(new ApiError(400, "Failed to create shipment"));
     }
 
-    return res.status(200).json({
-      success: true,
-      trackingNumber: shipmentResult.ShipmentIdentificationNumber,
-      label: shipmentResult.PackageResults[0].ShippingLabel.GraphicImage,
-      format: shipmentResult.PackageResults[0].ShippingLabel.ImageFormat.Code,
-    });
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(200, response.data, "Shipment created successfully")
+      );
   } catch (error) {
     console.dir(error.response?.data || error, { depth: null });
-    return res.status(500).json({
-      success: false,
-      message: "Failed to create UPS shipment",
-      error: error.response?.data || error.message,
-    });
+    return res.status(500).json(new ApiError(500, "Internal Server Error"));
   }
 };
 
@@ -312,7 +306,7 @@ const TimeInTransit = async (req, res) => {
 };
 
 module.exports = {
-  CreateShipping,
+  getShippingCharges,
   CancelShipping,
   CalculateRate,
   Tacking,
