@@ -10,16 +10,9 @@ const BASE_URL =
 const getShippingCharges = async (req, res) => {
   try {
     const accessToken = await getUPSToken();
-    const {
-      shipper,
-      shipTo,
-      shipFrom,
-      packages,
-      serviceCode,
-      shipmentDescription,
-      labelFormat,
-      customerContext,
-    } = req.body;
+    const { shipTo, packages } = req.body;
+
+    console.log(shipTo, packages);
 
     const response = await axios.post(
       `${BASE_URL}/api/shipments/v1/ship`,
@@ -27,62 +20,50 @@ const getShippingCharges = async (req, res) => {
         ShipmentRequest: {
           Request: {
             RequestOption: "rate",
-            TransactionReference: {
-              CustomerContext: customerContext || "Shipment",
-            },
           },
           Shipment: {
-            Description: shipmentDescription || "Shipment created from app",
             Shipper: {
-              Name: shipper.name,
-              AttentionName: shipper.attentionName,
+              Name: "info@eyemesto.com",
+              phone: {
+                Number: "9057817567",
+              },
               ShipperNumber: process.env.UPS_SHIPPER_NUMBER,
               Address: {
-                AddressLine: shipper.address.addressLine,
-                City: shipper.address.city,
-                StateProvinceCode: shipper.address.stateCode,
-                PostalCode: shipper.address.postalCode,
-                CountryCode: shipper.address.countryCode,
+                AddressLine: ["277 Falshire Dr NE"],
+                City: "Calgary",
+                StateProvinceCode: "AB",
+                PostalCode: "T3J1T9",
+                CountryCode: "CA",
               },
             },
             ShipTo: {
               Name: shipTo.name,
-              AttentionName: shipTo.attentionName,
+              Phone: {
+                Number: shipTo.phone,
+              },
               Address: {
                 AddressLine: shipTo.address.addressLine,
                 City: shipTo.address.city,
-                StateProvinceCode: shipTo.address.stateCode,
+                StateProvinceCode: shipTo.address.stateOrProvince,
                 PostalCode: shipTo.address.postalCode,
                 CountryCode: shipTo.address.countryCode,
               },
             },
-            ShipFrom: {
-              Name: shipFrom.name,
-              AttentionName: shipFrom.attentionName,
-              Address: {
-                AddressLine: shipFrom.address.addressLine,
-                City: shipFrom.address.city,
-                StateProvinceCode: shipFrom.address.stateCode,
-                PostalCode: shipFrom.address.postalCode,
-                CountryCode: shipFrom.address.countryCode,
-              },
-            },
             PaymentInformation: {
               ShipmentCharge: {
-                Type: "01", // Transportation charge
+                Type: "01",
                 BillShipper: {
                   AccountNumber: process.env.UPS_SHIPPER_NUMBER,
                 },
               },
             },
             Service: {
-              Code: serviceCode || "11", // Default: UPS Standard
+              Code: "11",
               Description: "Shipping Service",
             },
-            Package: packages.map((pkg) => ({
-              Description: pkg.description,
+            Package: packages?.map((pkg) => ({
               Packaging: {
-                Code: pkg.packagingCode || "02",
+                Code: "02",
               },
               PackageWeight: {
                 UnitOfMeasurement: {
@@ -91,11 +72,6 @@ const getShippingCharges = async (req, res) => {
                 Weight: pkg.weight,
               },
             })),
-          },
-          LabelSpecification: {
-            LabelImageFormat: {
-              Code: labelFormat || "GIF",
-            },
           },
         },
       },
@@ -108,10 +84,13 @@ const getShippingCharges = async (req, res) => {
         },
       }
     );
+
     const shipmentResult = response.data?.ShipmentResponse?.ShipmentResults;
 
     if (!shipmentResult) {
-      return res.status(400).json(new ApiError(400, "Failed to create shipment"));
+      return res
+        .status(400)
+        .json(new ApiError(400, "Failed to create shipment"));
     }
 
     return res

@@ -39,7 +39,7 @@ const createAddress = async (req, res) => {
       return res.status(400).json(new ApiError(400, "User ID is required"));
     }
 
-    if (!billing.firstName || !billing.lastName || !billing.address) {
+    if (!billing.name || !billing.address || !billing.provinceCode) {
       return res
         .status(400)
         .json(new ApiError(400, "Billing address details are incomplete"));
@@ -61,13 +61,15 @@ const createAddress = async (req, res) => {
       isDifferent: !!isDifferent,
       isActive: true,
       billing: {
-        firstName: billing.firstName,
-        lastName: billing.lastName,
+        name: billing.name,
         country: billing.country,
         state: billing.state,
         city: billing.city,
         address: billing.address,
-        postcode: billing.postcode,
+        postCode: billing.postCode,
+        provinceCode: billing.provinceCode,
+        countryCode: billing.countryCode,
+        phoneCode: billing.phoneCode,
         phone: billing.phone,
         email: billing.email?.toLowerCase(),
       },
@@ -75,13 +77,15 @@ const createAddress = async (req, res) => {
 
     if (isDifferent && shipping) {
       newAddress.shipping = {
-        firstName: shipping.firstName || billing.firstName,
-        lastName: shipping.lastName || billing.lastName,
+        name: shipping.name || billing.name,
         country: shipping.country || billing.country,
         state: shipping.state || billing.state,
         city: shipping.city || billing.city,
         address: shipping.address || billing.address,
-        postcode: shipping.postcode || billing.postcode,
+        postCode: shipping.postCode || billing.postCode,
+        countryCode: shipping.countryCode || billing.countryCode,
+        provinceCode: shipping.provinceCode || billing.provinceCode,
+        phoneCode: shipping.phoneCode || billing.phoneCode,
         phone: shipping.phone || billing.phone,
         email: shipping.email?.toLowerCase() || billing.email?.toLowerCase(),
       };
@@ -90,7 +94,7 @@ const createAddress = async (req, res) => {
     const savedAddress = await newAddress.save();
 
     return res
-      .status(201)
+      .status(200)
       .json(new ApiResponse(201, savedAddress, "Address created successfully"));
   } catch (error) {
     return res
@@ -109,6 +113,12 @@ const updateAddress = async (req, res) => {
     const { userId, addressId, billing, shipping, isDifferent, isActive } =
       req.body;
 
+    if (!userId || !addressId) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "User ID and Address ID are required"));
+    }
+
     const address = await AddressModel.findOne({
       _id: addressId,
       user: userId,
@@ -119,37 +129,82 @@ const updateAddress = async (req, res) => {
     }
 
     if (billing) {
-      address.billing = {
-        ...address.billing,
-        ...billing,
-        email: billing.email?.toLowerCase(),
-      };
-    }
+      const {
+        name,
+        country,
+        state,
+        city,
+        address: streetAddress,
+        postCode, // Keep this as postCode to match the request body
+        phoneCode,
+        phone,
+        email,
+        provinceCode,
+        countryCode,
+      } = billing;
 
-    if (typeof isDifferent !== "undefined") {
-      address.isDifferent = !!isDifferent;
-
-      if (isDifferent && shipping) {
-        address.shipping = {
-          ...address.shipping,
-          ...shipping,
-          email: shipping.email?.toLowerCase(),
-        };
-      } else if (!isDifferent) {
-        address.shipping = undefined;
+      if (!name || !streetAddress || !provinceCode) {
+        return res
+          .status(400)
+          .json(new ApiError(400, "Incomplete billing data"));
       }
-    } else if (address.isDifferent && shipping) {
-      address.shipping = {
-        ...address.shipping,
-        ...shipping,
-        email: shipping.email?.toLowerCase(),
+
+      address.billing = {
+        name,
+        country,
+        state,
+        city,
+        address: streetAddress,
+        postCode,
+        phoneCode,
+        phone,
+        email: email?.toLowerCase() || "",
+        provinceCode,
+        countryCode,
       };
     }
 
-    if (isActive) {
-      await AddressModel.updateMany({ user: userId }, { isActive: false });
+    address.isDifferent = !!isDifferent;
+
+    if (isDifferent) {
+      address.shipping = {
+        name: shipping?.name || billing?.name || address.billing?.name,
+        country:
+          shipping?.country || billing?.country || address.billing?.country,
+        state: shipping?.state || billing?.state || address.billing?.state,
+        city: shipping?.city || billing?.city || address.billing?.city,
+        address:
+          shipping?.address || billing?.address || address.billing?.address,
+        postCode:
+          shipping?.postCode || billing?.postCode || address.billing?.postCode,
+        phoneCode:
+          shipping?.phoneCode ||
+          billing?.phoneCode ||
+          address.billing?.phoneCode,
+        phone: shipping?.phone || billing?.phone || address.billing?.phone,
+        email:
+          shipping?.email?.toLowerCase() ||
+          billing?.email?.toLowerCase() ||
+          address.billing?.email,
+        provinceCode:
+          shipping?.provinceCode ||
+          billing?.provinceCode ||
+          address.billing?.provinceCode,
+        countryCode:
+          shipping?.countryCode ||
+          billing?.countryCode ||
+          address.billing?.countryCode,
+      };
+    } else {
+      address.shipping = undefined;
     }
-    address.isActive = !!isActive;
+
+    if (typeof isActive === "boolean") {
+      if (isActive) {
+        await AddressModel.updateMany({ user: userId }, { isActive: false });
+      }
+      address.isActive = isActive;
+    }
 
     const updatedAddress = await address.save();
 
@@ -159,6 +214,7 @@ const updateAddress = async (req, res) => {
         new ApiResponse(200, updatedAddress, "Address updated successfully")
       );
   } catch (error) {
+    console.error("Error updating address:", error);
     return res
       .status(500)
       .json(

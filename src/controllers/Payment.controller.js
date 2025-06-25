@@ -68,7 +68,6 @@ const CreatePayment = async (req, res) => {
       expdate = yy + mm;
     }
 
-    console.log(expdate, cleanedCardNumber);
     const orderId = generateOrderId();
     const xmlPayload = buildXmlRequest(
       orderId,
@@ -94,7 +93,6 @@ const CreatePayment = async (req, res) => {
 
     const receipt = parsed.response.receipt;
 
-    console.log(receipt);
     const paymentRes = await PaymentModel.create({
       userId,
       orderId,

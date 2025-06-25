@@ -3,9 +3,6 @@ const {
   Counts,
   UploadImages,
   getCountryData,
-  getStateData,
-  getCities,
-  UPSShipping,
 } = require("../controllers/Count.controller");
 const upload = require("../middlewares/Multer.middleware");
 const CountRoute = express.Router();
@@ -14,6 +11,5 @@ const CountRoute = express.Router();
 CountRoute.get("/:id", Counts);
 CountRoute.post("/upload", upload.array("images"), UploadImages);
 CountRoute.get("/get/country", getCountryData);
-CountRoute.get("/get/getCities", getCities);
 
 module.exports = CountRoute;

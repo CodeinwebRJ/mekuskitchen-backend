@@ -100,7 +100,6 @@ const SendOtp = async (req, res) => {
 
     await sendMail(admin.email, "Your Password Reset OTP", htmlContent);
 
-    console.log(otp);
     return res.status(200).json(new ApiResponse(200, otp, "OTP sent to email"));
   } catch (error) {
     console.error(error);
