@@ -139,7 +139,6 @@ const getUserCart = async (req, res) => {
   }
 };
 
-
 const addToCart = async (req, res) => {
   try {
     const {

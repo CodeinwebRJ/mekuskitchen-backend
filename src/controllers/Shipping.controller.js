@@ -12,21 +12,57 @@ const getShippingCharges = async (req, res) => {
     const accessToken = await getUPSToken();
     const { shipTo, packages } = req.body;
 
-    console.log(shipTo, packages);
+    if (!shipTo || !packages || !Array.isArray(packages)) {
+      return res.status(400).json(new ApiError(400, "Invalid input: shipTo and packages are required"));
+    }
+
+    const convertToKgs = (weight, unit) => {
+      const w = parseFloat(weight);
+      if (isNaN(w)) {
+        throw new Error(`Invalid weight value: ${weight}`);
+      }
+      switch ((unit || "kgs").toLowerCase()) {
+        case "g":
+        case "gram":
+          return w / 1000;
+        case "lb":
+        case "lbs":
+        case "pound":
+          return w * 0.453592;
+        case "oz":
+        case "ounce":
+          return w * 0.0283495;
+        case "kg":
+        case "kgs":
+        default:
+          return w;
+      }
+    };
+
+    const flattenedPackages = packages.flatMap((pkg) => {
+      const quantity = parseInt(pkg.quantity, 10) || 1;
+      if (isNaN(quantity) || quantity < 1) {
+        throw new Error(`Invalid quantity for package: ${JSON.stringify(pkg)}`);
+      }
+      const convertedWeight = convertToKgs(pkg.weight, pkg.unit);
+      return Array.from({ length: quantity }).map(() => ({
+        Packaging: { Code: "02" },
+        PackageWeight: {
+          UnitOfMeasurement: { Code: "KGS" },
+          Weight: convertedWeight.toFixed(2),
+        },
+      }));
+    });
 
     const response = await axios.post(
       `${BASE_URL}/api/shipments/v1/ship`,
       {
         ShipmentRequest: {
-          Request: {
-            RequestOption: "rate",
-          },
+          Request: { RequestOption: "rate" },
           Shipment: {
             Shipper: {
               Name: "info@eyemesto.com",
-              phone: {
-                Number: "9057817567",
-              },
+              Phone: { Number: "9057817567" },
               ShipperNumber: process.env.UPS_SHIPPER_NUMBER,
               Address: {
                 AddressLine: ["277 Falshire Dr NE"],
@@ -38,9 +74,7 @@ const getShippingCharges = async (req, res) => {
             },
             ShipTo: {
               Name: shipTo.name,
-              Phone: {
-                Number: shipTo.phone,
-              },
+              Phone: { Number: shipTo.phone },
               Address: {
                 AddressLine: shipTo.address.addressLine,
                 City: shipTo.address.city,
@@ -52,26 +86,14 @@ const getShippingCharges = async (req, res) => {
             PaymentInformation: {
               ShipmentCharge: {
                 Type: "01",
-                BillShipper: {
-                  AccountNumber: process.env.UPS_SHIPPER_NUMBER,
-                },
+                BillShipper: { AccountNumber: process.env.UPS_SHIPPER_NUMBER },
               },
             },
             Service: {
               Code: "11",
               Description: "Shipping Service",
             },
-            Package: packages?.map((pkg) => ({
-              Packaging: {
-                Code: "02",
-              },
-              PackageWeight: {
-                UnitOfMeasurement: {
-                  Code: pkg.unit || "KGS",
-                },
-                Weight: pkg.weight,
-              },
-            })),
+            Package: flattenedPackages,
           },
         },
       },
@@ -79,7 +101,7 @@ const getShippingCharges = async (req, res) => {
         headers: {
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
-          transId: "trans-" + Date.now(),
+          transId: `trans-${Date.now()}`,
           transactionSrc: "myApp",
         },
       }
@@ -88,16 +110,12 @@ const getShippingCharges = async (req, res) => {
     const shipmentResult = response.data?.ShipmentResponse?.ShipmentResults;
 
     if (!shipmentResult) {
-      return res
-        .status(400)
-        .json(new ApiError(400, "Failed to create shipment"));
+      return res.status(400).json(new ApiError(400, "Failed to create shipment"));
     }
 
     return res
       .status(200)
-      .json(
-        new ApiResponse(200, response.data, "Shipment created successfully")
-      );
+      .json(new ApiResponse(200, response.data, "Shipment created successfully"));
   } catch (error) {
     console.dir(error.response?.data || error, { depth: null });
     return res.status(500).json(new ApiError(500, "Internal Server Error"));
