@@ -3,6 +3,9 @@ const ApiError = require("./ApiError");
 
 const getUPSToken = async () => {
   try {
+    console.log(process.env.UPS_CLIENT_ID);
+    console.log(process.env.UPS_CLIENT_SECRET);
+
     const credentials = Buffer.from(
       `${process.env.UPS_CLIENT_ID}:${process.env.UPS_CLIENT_SECRET}`
     ).toString("base64");
@@ -18,7 +21,8 @@ const getUPSToken = async () => {
       }
     );
 
-    const { access_token} = response.data;
+    console.log(response.data);
+    const { access_token } = response.data;
 
     return access_token;
   } catch (error) {

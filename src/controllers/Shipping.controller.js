@@ -12,6 +12,8 @@ const getShippingCharges = async (req, res) => {
     const accessToken = await getUPSToken();
     const { shipTo, packages } = req.body;
 
+    console.log(accessToken)
+
     if (!shipTo || !packages || !Array.isArray(packages)) {
       return res.status(400).json(new ApiError(400, "Invalid input: shipTo and packages are required"));
     }
@@ -117,7 +119,8 @@ const getShippingCharges = async (req, res) => {
       .status(200)
       .json(new ApiResponse(200, response.data, "Shipment created successfully"));
   } catch (error) {
-    console.dir(error.response?.data || error, { depth: null });
+    // console.dir(error.response?.data || error, { depth: null });
+    console.log(error)
     return res.status(500).json(new ApiError(500, "Internal Server Error"));
   }
 };
