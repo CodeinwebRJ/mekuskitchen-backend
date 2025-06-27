@@ -77,7 +77,6 @@ const UploadImages = async (req, res) => {
         .json(new ApiError(400, "All uploaded images must have valid URLs"));
     }
 
-    console.log(uploadedImages);
     return res
       .status(200)
       .json(
@@ -136,8 +135,6 @@ const UploadProductImage = async (req, res) => {
   try {
     const imageFiles = req.files || [];
 
-    console.log(imageFiles)
-
     if (!imageFiles) {
       return res
         .status(400)
@@ -164,8 +161,6 @@ const UploadProductImage = async (req, res) => {
         .status(400)
         .json(new ApiError(400, "All uploaded images must have valid URLs"));
     }
-
-    console.log(uploadedImages);
     return res
       .status(200)
       .json(
