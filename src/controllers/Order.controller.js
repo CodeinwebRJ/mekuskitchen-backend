@@ -22,25 +22,21 @@ const createOrder = async (req, res) => {
     } = req.body;
 
     if (!userId || !orderId || !cartId || !cartAmount || !paymentMethod) {
-      return res
-        .status(400)
-        .json(
-          new ApiError(
-            400,
-            "Missing required fields: userId, cartId, addressId, paymentMethod, and cartAmount are required"
-          )
-        );
+      return res.status(400).json(
+        new ApiError(
+          400,
+          "Missing required fields: userId, cartId, addressId, paymentMethod, and cartAmount are required"
+        )
+      );
     }
 
     if (!addressId && !selfPickup) {
-      return res
-        .status(400)
-        .json(
-          new ApiError(
-            400,
-            "Either addressId must be provided or selfPickup must be true"
-          )
-        );
+      return res.status(400).json(
+        new ApiError(
+          400,
+          "Either addressId must be provided or selfPickup must be true"
+        )
+      );
     }
 
     const cart = await CartModel.findById(cartId);
@@ -51,6 +47,17 @@ const createOrder = async (req, res) => {
     const cartItemsWithProducts = await Promise.all(
       (cart.items || []).map(async (item) => {
         const product = await ProductModel.findById(item.product_id);
+        
+        if (!product) {
+          throw new Error(`Product not found for ID: ${item.product_id}`);
+        }
+
+        if (product.stock !== undefined && product.stock < item.quantity) {
+          throw new Error(
+            `Insufficient stock for product: ${product.name}. Requested: ${item.quantity}, Available: ${product.stock}`
+          );
+        }
+
         return {
           ...(item.toObject?.() || item),
           productDetails: product || null,
@@ -82,6 +89,16 @@ const createOrder = async (req, res) => {
       Orderdate: new Date(),
     });
 
+    await Promise.all(
+      (cart.items || []).map(async (item) => {
+        await ProductModel.findByIdAndUpdate(
+          item.product_id,
+          { $inc: { stock: -item.quantity } },
+          { new: true }
+        );
+      })
+    );
+
     await CartModel.findByIdAndUpdate(cartId, {
       $set: {
         items: [],
@@ -95,7 +112,7 @@ const createOrder = async (req, res) => {
       .json(new ApiResponse(201, newOrder, "Order created successfully"));
   } catch (error) {
     console.error("Create order error:", error);
-    return res.status(500).json(new ApiError(500, "Internal server error"));
+    return res.status(500).json(new ApiError(500, error.message || "Internal server error"));
   }
 };
 

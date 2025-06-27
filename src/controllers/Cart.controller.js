@@ -41,6 +41,13 @@ const getUserCart = async (req, res) => {
     let taxConfig = null;
     if (provinceCode) {
       taxConfig = await TaxModel.findOne({ provinceCode });
+      if (!taxConfig) {
+        console.warn(
+          `No tax configuration found for provinceCode: ${provinceCode}`
+        );
+      }
+    } else {
+      console.warn("No provinceCode provided; skipping tax calculation");
     }
 
     let totalAmount = 0;
@@ -121,11 +128,11 @@ const getUserCart = async (req, res) => {
       ...cart.toObject(),
       items: itemsWithDetails,
       tiffins: tiffinsWithDetails,
-      totalAmount: totalAmount.toFixed(2),
-      totalFederalTax: totalFederalTax.toFixed(2),
-      totalProvinceTax: totalProvinceTax.toFixed(2),
+      totalAmount: String(totalAmount.toFixed(2)),
+      totalFederalTax: String(totalFederalTax.toFixed(2)),
+      totalProvinceTax: String(totalProvinceTax.toFixed(2)),
       totalTax: totalTax.toFixed(2),
-      grandTotal: (totalAmount + totalTax).toFixed(2),
+      grandTotal: String((totalAmount + totalTax).toFixed(2)),
     };
 
     return res
