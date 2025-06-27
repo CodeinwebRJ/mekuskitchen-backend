@@ -29,6 +29,9 @@ const getUserCart = async (req, res) => {
             totalFederalTax: "0",
             totalProvinceTax: "0",
             totalTax: "0",
+            discount: "0",
+            discountType: null,
+            couponCode: null,
             grandTotal: "0",
             createdAt: null,
             updatedAt: null,
@@ -46,8 +49,6 @@ const getUserCart = async (req, res) => {
           `No tax configuration found for provinceCode: ${provinceCode}`
         );
       }
-    } else {
-      console.warn("No provinceCode provided; skipping tax calculation");
     }
 
     let totalAmount = 0;
@@ -71,21 +72,12 @@ const getUserCart = async (req, res) => {
             (t) => t.category === productDetails.category
           );
 
-          if (
-            categoryTax &&
-            typeof categoryTax.federalTax === "number" &&
-            typeof categoryTax.provinceTax === "number"
-          ) {
+          if (categoryTax) {
             itemFederalTax = (itemSubtotal * categoryTax.federalTax) / 100;
             itemProvinceTax = (itemSubtotal * categoryTax.provinceTax) / 100;
 
             totalFederalTax += itemFederalTax;
             totalProvinceTax += itemProvinceTax;
-          } else {
-            console.warn(
-              `Invalid tax percentages for category: ${productDetails?.category}`,
-              categoryTax
-            );
           }
         }
 
@@ -114,21 +106,12 @@ const getUserCart = async (req, res) => {
             (t) => t.category === tiffinMenuDetails.taxCategory
           );
 
-          if (
-            categoryTax &&
-            typeof categoryTax.federalTax === "number" &&
-            typeof categoryTax.provinceTax === "number"
-          ) {
+          if (categoryTax) {
             tiffinFederalTax = (tiffinTotal * categoryTax.federalTax) / 100;
             tiffinProvinceTax = (tiffinTotal * categoryTax.provinceTax) / 100;
 
             totalFederalTax += tiffinFederalTax;
             totalProvinceTax += tiffinProvinceTax;
-          } else {
-            console.warn(
-              `Invalid tax percentages for tiffin taxCategory: ${tiffinMenuDetails?.taxCategory}`,
-              categoryTax
-            );
           }
         }
 
@@ -143,6 +126,8 @@ const getUserCart = async (req, res) => {
     );
 
     const totalTax = totalFederalTax + totalProvinceTax;
+    const discount = cart.discount || 0;
+    const grandTotal = totalAmount + totalTax - discount;
 
     const enrichedCart = {
       ...cart.toObject(),
@@ -152,7 +137,10 @@ const getUserCart = async (req, res) => {
       totalFederalTax: String(totalFederalTax.toFixed(2)),
       totalProvinceTax: String(totalProvinceTax.toFixed(2)),
       totalTax: String(totalTax.toFixed(2)),
-      grandTotal: String((totalAmount + totalTax).toFixed(2)),
+      discount: String(discount.toFixed(2)),
+      discountType: cart.discountType || null,
+      couponCode: cart.couponCode || null,
+      grandTotal: String(grandTotal.toFixed(2)),
     };
 
     return res

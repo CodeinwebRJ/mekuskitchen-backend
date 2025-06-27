@@ -2,6 +2,7 @@ const ApiError = require("../utils/ApiError");
 const ApiResponse = require("../utils/ApiResponse");
 const CouponModel = require("../models/Coupon.model");
 const CategoryModel = require("../models/Category.model");
+const CartModel = require("../models/Cart.model");
 
 const getAllCoupons = async (req, res) => {
   try {
@@ -169,7 +170,6 @@ const ValidateCoupon = async (req, res) => {
 
     const trimmedCode = code.trim().toUpperCase();
 
-    // Find active coupon
     const coupon = await CouponModel.findOne({
       code: trimmedCode,
       isActive: true,
@@ -195,14 +195,12 @@ const ValidateCoupon = async (req, res) => {
         );
     }
 
-    // Check if user has already used the coupon
     if (coupon.usedBy.includes(userId)) {
       return res
         .status(400)
         .json(new ApiError(400, "You have already used this coupon"));
     }
 
-    // Category filtering
     const inputCategories = {
       category: category?.split(",").map((c) => c.trim()) || [],
       subCategory: subCategory?.split(",").map((c) => c.trim()) || [],
@@ -282,15 +280,6 @@ const ValidateCoupon = async (req, res) => {
         );
     }
 
-    // Update coupon with userId & increment usedCount
-    await CouponModel.updateOne(
-      { _id: coupon._id },
-      {
-        $addToSet: { usedBy: userId },
-        $inc: { usedCount: 1 },
-      }
-    );
-
     let discount = 0;
     if (coupon.discountType === "percentage") {
       discount = (coupon.discountValue / 100) * orderAmount;
@@ -300,6 +289,22 @@ const ValidateCoupon = async (req, res) => {
     }
 
     discount = Math.round(discount * 100) / 100;
+
+    await CouponModel.updateOne(
+      { _id: coupon._id },
+      {
+        $addToSet: { usedBy: userId },
+        $inc: { usedCount: 1 },
+      }
+    );
+
+    const cart = await CartModel.findOne({ user: userId });
+    if (cart) {
+      cart.discount = discount;
+      cart.discountType = coupon.discountType;
+      cart.couponCode = coupon.code;
+      await cart.save();
+    }
 
     let formattedExpiresAt = null;
     if (coupon.expiresAt) {

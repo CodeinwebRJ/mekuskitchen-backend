@@ -38,19 +38,19 @@ const CartSchema = new mongoose.Schema(
           min: 1,
         },
         price: {
-          type: Number, 
+          type: Number,
           required: true,
           min: 0,
         },
         sku: {
           skuId: {
-            type: mongoose.Schema.Types.ObjectId, 
+            type: mongoose.Schema.Types.ObjectId,
           },
           name: {
-            type: String, 
+            type: String,
           },
           skuName: {
-            type: String, 
+            type: String,
           },
           images: [
             {
@@ -68,6 +68,19 @@ const CartSchema = new mongoose.Schema(
     tiffins: [TiffinEntrySchema],
     totalAmount: {
       type: Number,
+    },
+    discount: {
+      type: Number,
+      default: 0,
+    },
+    discountType: {
+      type: String,
+      enum: ["percentage", "fixed", null],
+      default: null,
+    },
+    couponCode: {
+      type: String,
+      default: null,
     },
   },
   {
