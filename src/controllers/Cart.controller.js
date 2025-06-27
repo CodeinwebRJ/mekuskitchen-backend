@@ -70,12 +70,22 @@ const getUserCart = async (req, res) => {
           const categoryTax = taxConfig?.taxes?.find(
             (t) => t.category === productDetails.category
           );
-          if (categoryTax) {
+
+          if (
+            categoryTax &&
+            typeof categoryTax.federalTax === "number" &&
+            typeof categoryTax.provinceTax === "number"
+          ) {
             itemFederalTax = (itemSubtotal * categoryTax.federalTax) / 100;
             itemProvinceTax = (itemSubtotal * categoryTax.provinceTax) / 100;
 
             totalFederalTax += itemFederalTax;
             totalProvinceTax += itemProvinceTax;
+          } else {
+            console.warn(
+              `Invalid tax percentages for category: ${productDetails?.category}`,
+              categoryTax
+            );
           }
         }
 
@@ -103,12 +113,22 @@ const getUserCart = async (req, res) => {
           const categoryTax = taxConfig?.taxes?.find(
             (t) => t.category === tiffinMenuDetails.taxCategory
           );
-          if (categoryTax) {
+
+          if (
+            categoryTax &&
+            typeof categoryTax.federalTax === "number" &&
+            typeof categoryTax.provinceTax === "number"
+          ) {
             tiffinFederalTax = (tiffinTotal * categoryTax.federalTax) / 100;
             tiffinProvinceTax = (tiffinTotal * categoryTax.provinceTax) / 100;
 
             totalFederalTax += tiffinFederalTax;
             totalProvinceTax += tiffinProvinceTax;
+          } else {
+            console.warn(
+              `Invalid tax percentages for tiffin taxCategory: ${tiffinMenuDetails?.taxCategory}`,
+              categoryTax
+            );
           }
         }
 
@@ -131,7 +151,7 @@ const getUserCart = async (req, res) => {
       totalAmount: String(totalAmount.toFixed(2)),
       totalFederalTax: String(totalFederalTax.toFixed(2)),
       totalProvinceTax: String(totalProvinceTax.toFixed(2)),
-      totalTax: totalTax.toFixed(2),
+      totalTax: String(totalTax.toFixed(2)),
       grandTotal: String((totalAmount + totalTax).toFixed(2)),
     };
 
