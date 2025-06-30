@@ -303,6 +303,7 @@ const ValidateCoupon = async (req, res) => {
       cart.discount = discount;
       cart.discountType = coupon.discountType;
       cart.couponCode = coupon.code;
+      cart.discountValue = coupon.discountValue;
       await cart.save();
     }
 
@@ -504,8 +505,8 @@ const CreateCoupons = async (req, res) => {
     await coupon.save();
 
     return res
-      .status(201)
-      .json(new ApiResponse(201, coupon, "Coupon created successfully"));
+      .status(200)
+      .json(new ApiResponse(200, coupon, "Coupon created successfully"));
   } catch (error) {
     console.error("Create coupon error:", error);
     const statusCode = error instanceof ApiError ? error.statusCode : 500;

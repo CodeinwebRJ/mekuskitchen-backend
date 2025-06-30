@@ -73,6 +73,10 @@ const CartSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    discountValue: {
+      type: Number,
+      default: 0,
+    },
     discountType: {
       type: String,
       enum: ["percentage", "fixed", null],

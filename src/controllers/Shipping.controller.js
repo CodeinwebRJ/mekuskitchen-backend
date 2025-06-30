@@ -117,8 +117,8 @@ const getShippingCharges = async (req, res) => {
       .status(200)
       .json(new ApiResponse(200, response.data, "Shipment created successfully"));
   } catch (error) {
-    // console.dir(error.response?.data || error, { depth: null });
-    console.log(error)
+    console.dir(error.response?.data || error, { depth: null });
+    // console.log(error)
     return res.status(500).json(new ApiError(500, "Internal Server Error"));
   }
 };
