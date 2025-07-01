@@ -62,7 +62,11 @@ const getUserCart = async (req, res) => {
         let itemFederalTax = 0;
         let itemProvinceTax = 0;
 
-        if (productDetails?.category && taxConfig?.taxes) {
+        if (
+          productDetails?.category &&
+          !productDetails?.isTaxFree && // 🔥 Skip tax if isTaxFree is true
+          taxConfig?.taxes
+        ) {
           const categoryTax = taxConfig.taxes.find(
             (t) => t.category === productDetails.category
           );
@@ -95,7 +99,11 @@ const getUserCart = async (req, res) => {
         let tiffinFederalTax = 0;
         let tiffinProvinceTax = 0;
 
-        if (tiffinMenuDetails?.taxCategory && taxConfig?.taxes) {
+        if (
+          tiffinMenuDetails?.taxCategory &&
+          !tiffinMenuDetails?.isTaxFree && // 🔥 Same check for tiffins (if applicable)
+          taxConfig?.taxes
+        ) {
           const categoryTax = taxConfig.taxes.find(
             (t) => t.category === tiffinMenuDetails.taxCategory
           );
@@ -471,7 +479,15 @@ const updateCart = async (req, res) => {
       }
     }
 
-    // Fetch tax configuration
+    // === Remove coupon if cart becomes empty ===
+    if (cart.items.length === 0 && cart.tiffins.length === 0) {
+      cart.couponCode = null;
+      cart.discountType = null;
+      cart.discountValue = 0;
+      cart.discount = 0;
+    }
+
+    // === Tax Calculation ===
     let taxConfig = null;
     if (provinceCode) {
       taxConfig = await TaxModel.findOne({ provinceCode });
@@ -515,7 +531,7 @@ const updateCart = async (req, res) => {
 
     const totalTax = totalFederalTax + totalProvinceTax;
 
-    // === Calculate Discount ===
+    // === Discount Calculation ===
     let discount = 0;
     if (cart.couponCode && cart.discountType && cart.discountValue) {
       if (cart.discountType === "percentage") {
@@ -527,7 +543,7 @@ const updateCart = async (req, res) => {
 
     const grandTotal = totalAmount + totalTax - discount;
 
-    // === Update Cart Fields ===
+    // === Save Updated Fields ===
     cart.totalAmount = parseFloat(totalAmount.toFixed(2));
     cart.totalFederalTax = parseFloat(totalFederalTax.toFixed(2));
     cart.totalProvinceTax = parseFloat(totalProvinceTax.toFixed(2));
@@ -537,7 +553,7 @@ const updateCart = async (req, res) => {
 
     await cart.save();
 
-    // === Enrich Response ===
+    // === Enrich Items and Tiffins ===
     const itemsWithDetails = await Promise.all(
       cart.items.map(async (item) => {
         const product = await ProductModel.findById(item.product_id);

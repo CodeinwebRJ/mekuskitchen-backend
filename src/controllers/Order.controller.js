@@ -22,21 +22,25 @@ const createOrder = async (req, res) => {
     } = req.body;
 
     if (!userId || !orderId || !cartId || !cartAmount || !paymentMethod) {
-      return res.status(400).json(
-        new ApiError(
-          400,
-          "Missing required fields: userId, cartId, addressId, paymentMethod, and cartAmount are required"
-        )
-      );
+      return res
+        .status(400)
+        .json(
+          new ApiError(
+            400,
+            "Missing required fields: userId, cartId, addressId, paymentMethod, and cartAmount are required"
+          )
+        );
     }
 
     if (!addressId && !selfPickup) {
-      return res.status(400).json(
-        new ApiError(
-          400,
-          "Either addressId must be provided or selfPickup must be true"
-        )
-      );
+      return res
+        .status(400)
+        .json(
+          new ApiError(
+            400,
+            "Either addressId must be provided or selfPickup must be true"
+          )
+        );
     }
 
     const cart = await CartModel.findById(cartId);
@@ -47,7 +51,7 @@ const createOrder = async (req, res) => {
     const cartItemsWithProducts = await Promise.all(
       (cart.items || []).map(async (item) => {
         const product = await ProductModel.findById(item.product_id);
-        
+
         if (!product) {
           throw new Error(`Product not found for ID: ${item.product_id}`);
         }
@@ -112,7 +116,9 @@ const createOrder = async (req, res) => {
       .json(new ApiResponse(201, newOrder, "Order created successfully"));
   } catch (error) {
     console.error("Create order error:", error);
-    return res.status(500).json(new ApiError(500, error.message || "Internal server error"));
+    return res
+      .status(500)
+      .json(new ApiError(500, error.message || "Internal server error"));
   }
 };
 
@@ -151,7 +157,7 @@ const getAllOrders = async (req, res) => {
     const skip = (page - 1) * limit;
 
     let filter = {};
-    
+
     if (orderStatus) {
       filter.orderStatus = orderStatus;
     }
@@ -222,22 +228,20 @@ const getAllOrders = async (req, res) => {
       .skip(skip)
       .limit(limit);
 
-    return res
-      .status(200)
-      .json(
-        new ApiResponse(
-          200,
-          {
-            success: true,
-            total,
-            page: String(page),
-            limit: String(limit),
-            pages: Math.ceil(total / limit),
-            orders,
-          },
-          "Orders fetched successfully"
-        )
-      );
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          success: true,
+          total,
+          page: String(page),
+          limit: String(limit),
+          pages: Math.ceil(total / limit),
+          orders,
+        },
+        "Orders fetched successfully"
+      )
+    );
   } catch (error) {
     console.error("Get all orders error:", error);
     return res.status(500).json(new ApiError(500, "Internal server error"));
@@ -247,6 +251,7 @@ const getAllOrders = async (req, res) => {
 const getOrdersByUser = async (req, res) => {
   try {
     const { userId } = req.params;
+    const { orderStatus } = req.query;
 
     if (!userId) {
       return res
@@ -254,13 +259,12 @@ const getOrdersByUser = async (req, res) => {
         .json(new ApiError(400, "Invalid or missing user ID"));
     }
 
-    const orders = await OrderModel.find({ userId }).sort({ Orderdate: -1 });
-
-    if (!orders || orders.length === 0) {
-      return res
-        .status(404)
-        .json(new ApiError(404, "No orders found for this user"));
+    const filter = { userId };
+    if (orderStatus && orderStatus !== "All") {
+      filter.orderStatus = orderStatus;
     }
+
+    const orders = await OrderModel.find(filter).sort({ Orderdate: -1 });
 
     return res
       .status(200)

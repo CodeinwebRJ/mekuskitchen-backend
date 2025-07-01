@@ -223,6 +223,8 @@ const CreateProduct = async (req, res) => {
       details: skuItem || {},
     }));
 
+    console.log(processedSkus);
+
     if (sizes && Array.isArray(sizes)) {
       for (const size of sizes) {
         if (
