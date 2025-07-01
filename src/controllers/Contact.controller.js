@@ -4,11 +4,7 @@ const ContactModel = require("../models/Contact.model");
 
 const sendQuary = async (req, res) => {
   try {
-    const { userId, phone, name, email, message } = req.body;
-
-    if (!userId) {
-      throw new ApiError(400, "User ID is required");
-    }
+    const { phone, name, email, message } = req.body;
 
     if (email && !/^\S+@\S+\.\S+$/.test(email)) {
       throw new ApiError(400, "Invalid email format");
@@ -19,7 +15,6 @@ const sendQuary = async (req, res) => {
     }
 
     const contact = await ContactModel.create({
-      user: userId,
       name: name || "",
       email: email || "",
       phone: phone || null,
