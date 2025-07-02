@@ -4,6 +4,11 @@ const ApiError = require("../utils/ApiError");
 const ApiResponse = require("../utils/ApiResponse");
 const PaymentModel = require("../models/Payment.model");
 
+const MONERIS_API_URL =
+  process.env.MONARIS_ENV === "production"
+    ? "https://www3.moneris.com/gateway2/servlet/MpgRequest"
+    : "https://esqa.moneris.com/gateway2/servlet/MpgRequest";
+
 const generateOrderId = () => {
   const now = Date.now().toString();
   const trimmed = now.slice(-8);
@@ -77,15 +82,11 @@ const CreatePayment = async (req, res) => {
       cvv
     );
 
-    const monerisResponse = await axios.post(
-      process.env.MONERIS_API_URL,
-      xmlPayload,
-      {
-        headers: {
-          "Content-Type": "text/xml",
-        },
-      }
-    );
+    const monerisResponse = await axios.post(MONERIS_API_URL, xmlPayload, {
+      headers: {
+        "Content-Type": "text/xml",
+      },
+    });
 
     const parsed = await xml2js.parseStringPromise(monerisResponse.data, {
       explicitArray: false,
@@ -170,7 +171,7 @@ const refundPayment = async (req, res) => {
       payment.transactionId
     );
 
-    const response = await axios.post(process.env.MONERIS_API_URL, xmlPayload, {
+    const response = await axios.post(MONERIS_API_URL, xmlPayload, {
       headers: { "Content-Type": "text/xml" },
     });
 

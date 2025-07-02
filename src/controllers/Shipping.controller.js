@@ -5,15 +5,21 @@ const getUPSToken = require("../utils/UPSToken");
 const { default: axios } = require("axios");
 
 const BASE_URL =
-  process.env.UPS_ENV === "sandbox" ? "https://wwwcie.ups.com" : "";
+  process.env.UPS_ENV === "sandbox"
+    ? "https://wwwcie.ups.com"
+    : "https://onlinetools.ups.com";
 
-const getShippingCharges = async (req, res) => {
+const CreateShipment = async (req, res) => {
   try {
     const accessToken = await getUPSToken();
-    const { shipTo, packages } = req.body;
+    const { shipTo, packages, RequestOption } = req.body;
 
     if (!shipTo || !packages || !Array.isArray(packages)) {
-      return res.status(400).json(new ApiError(400, "Invalid input: shipTo and packages are required"));
+      return res
+        .status(400)
+        .json(
+          new ApiError(400, "Invalid input: shipTo and packages are required")
+        );
     }
 
     const convertToKgs = (weight, unit) => {
@@ -58,7 +64,7 @@ const getShippingCharges = async (req, res) => {
       `${BASE_URL}/api/shipments/v1/ship`,
       {
         ShipmentRequest: {
-          Request: { RequestOption: "rate" },
+          Request: { RequestOption: RequestOption },
           Shipment: {
             Shipper: {
               Name: "info@eyemesto.com",
@@ -110,12 +116,16 @@ const getShippingCharges = async (req, res) => {
     const shipmentResult = response.data?.ShipmentResponse?.ShipmentResults;
 
     if (!shipmentResult) {
-      return res.status(400).json(new ApiError(400, "Failed to create shipment"));
+      return res
+        .status(400)
+        .json(new ApiError(400, "Failed to create shipment"));
     }
 
     return res
       .status(200)
-      .json(new ApiResponse(200, response.data, "Shipment created successfully"));
+      .json(
+        new ApiResponse(200, response.data, "Shipment created successfully")
+      );
   } catch (error) {
     console.dir(error.response?.data || error, { depth: null });
     // console.log(error)
@@ -304,7 +314,7 @@ const TimeInTransit = async (req, res) => {
 };
 
 module.exports = {
-  getShippingCharges,
+  CreateShipment,
   CancelShipping,
   CalculateRate,
   Tacking,
