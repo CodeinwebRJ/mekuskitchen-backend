@@ -16,6 +16,7 @@ const PaymentRoute = require("./routes/Payment.route");
 const AdminUserRoute = require("./routes/AdminUser.model");
 const ShippingRoute = require("./routes/Shipping.route");
 const CategoriesRoute = require("./routes/Categories.route");
+const SubscriptionStatusesRoute = require("./routes/et-world-SubscriptionStatuses.route");
 require("dotenv").config();
 
 const app = express();
@@ -50,5 +51,7 @@ app.use("/api/v1/payment", PaymentRoute);
 app.use("/api/v1/admin", AdminUserRoute);
 app.use("/api/v1/shipping", ShippingRoute);
 app.use("/api/v1/categories", CategoriesRoute);
+app.use("/api/v1/sub", SubscriptionStatusesRoute);
+
 
 module.exports = app;
