@@ -11,6 +11,8 @@ const couponSchema = new mongoose.Schema({
   usageLimit: { type: Number, default: 1 },
   usedCount: { type: Number, default: 0 },
   image: { type: String },
+  isMultiple: { type: Boolean },
+  allProducts: { type: Boolean},
   termsAndConditions: { type: String },
   description: { type: String },
   isActive: { type: Boolean, default: true },
