@@ -169,26 +169,13 @@ const ValidateCoupon = async (req, res) => {
     const coupon = await CouponModel.findOne({
       code: trimmedCode,
       isActive: true,
-      $and: [
-        {
-          $or: [
-            { startAt: { $exists: false } },
-            { startAt: { $lte: validationDate } },
-          ],
-        },
-        {
-          $or: [
-            { expiresAt: { $exists: false } },
-            { expiresAt: { $gte: validationDate } },
-          ],
-        },
-        {
-          $or: [
-            { usageLimit: { $exists: false } },
-            { usageLimit: 0 },
-            { $expr: { $gt: ["$usageLimit", "$usedCount"] } },
-          ],
-        },
+      $or: [
+        { startAt: { $exists: false } },
+        { startAt: { $lte: validationDate } },
+      ],
+      $or: [
+        { expiresAt: { $exists: false } },
+        { expiresAt: { $gte: validationDate } },
       ],
     });
 
@@ -486,7 +473,7 @@ const CreateCoupons = async (req, res) => {
     let parsedUsageLimit = 1;
     if (usageLimit !== undefined) {
       parsedUsageLimit = parseInt(usageLimit);
-      if (isNaN(parsedUsageLimit) || parsedUsageLimit <= 0) {
+      if (isNaN(parsedUsageLimit)) {
         return res
           .status(400)
           .json(new ApiError(400, "Usage limit must be a positive integer"));
