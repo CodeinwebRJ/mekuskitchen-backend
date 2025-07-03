@@ -24,7 +24,7 @@ const RegiesterAdmin = async (req, res) => {
     const existing = await AdminModel.findOne({ email });
 
     if (existing) {
-      return res.status(409).json(new ApiError(409, "Admin already exists"));
+      return res.status(409).json(new ApiError(409, "Admin user is already exists"));
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -55,7 +55,7 @@ const AdminLogin = async (req, res) => {
 
     const admin = await AdminModel.findOne({ uniqueId });
     if (!admin) {
-      return res.status(404).json(new ApiError(404, "Admin not found"));
+      return res.status(404).json(new ApiError(404, "Invalid credentials"));
     }
 
     const isPasswordValid = await bcrypt.compare(password, admin.password);
@@ -85,7 +85,7 @@ const SendOtp = async (req, res) => {
 
     const admin = await AdminModel.findOne({ email });
     if (!admin) {
-      return res.status(404).json(new ApiError(404, "Admin not found"));
+      return res.status(404).json(new ApiError(404, "Admin user not found"));
     }
 
     const otp = generateOTP();

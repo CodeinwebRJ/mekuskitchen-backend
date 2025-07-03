@@ -182,8 +182,14 @@ const ValidateCoupon = async (req, res) => {
             { expiresAt: { $gte: validationDate } },
           ],
         },
+        {
+          $or: [
+            { usageLimit: { $exists: false } },
+            { usageLimit: 0 },
+            { $expr: { $gt: ["$usageLimit", "$usedCount"] } },
+          ],
+        },
       ],
-      $expr: { $lt: ["$usedCount", "$usageLimit"] },
     });
 
     if (!coupon) {
@@ -299,14 +305,18 @@ const ValidateCoupon = async (req, res) => {
     discount = Math.min(discount, orderAmount);
     discount = Math.round(discount * 100) / 100;
 
-    await CouponModel.updateOne(
-      { _id: coupon._id },
-      {
-        $addToSet: { usedBy: userId },
-        $inc: { usedCount: 1 },
-      }
-    );
+    // Build update object depending on usageLimit
+    const updateOps = {
+      $addToSet: { usedBy: userId },
+    };
 
+    if (coupon.usageLimit && coupon.usageLimit > 0) {
+      updateOps.$inc = { usedCount: 1 };
+    }
+
+    await CouponModel.updateOne({ _id: coupon._id }, updateOps);
+
+    // Update cart with discount details
     const cart = await CartModel.findOne({ user: userId });
     if (cart) {
       cart.discount = discount;
@@ -334,8 +344,11 @@ const ValidateCoupon = async (req, res) => {
           discountValue: coupon.discountValue,
           minOrderAmount: coupon.minOrderAmount || 0,
           expiresAt: formattedExpiresAt,
-          usageLimit: coupon.usageLimit,
-          usedCount: coupon.usedCount + 1,
+          usageLimit: coupon.usageLimit || null,
+          usedCount:
+            coupon.usageLimit && coupon.usageLimit > 0
+              ? coupon.usedCount + 1
+              : null,
         },
         "Coupon validated successfully"
       )
@@ -551,6 +564,9 @@ const EditCoupons = async (req, res) => {
       description,
       isMultiple,
       allProducts,
+      category,
+      subCategory,
+      ProductCategory,
     } = req.body;
 
     if (!couponId) {
@@ -684,7 +700,6 @@ const EditCoupons = async (req, res) => {
       updateData.image = image;
     }
 
-    // isActive
     if (isActive !== undefined) {
       updateData.isActive = Boolean(isActive);
     }
@@ -725,6 +740,36 @@ const EditCoupons = async (req, res) => {
         }
         updateData.description = trimmedDesc;
       }
+    }
+
+    // ✅ Category, SubCategory, ProductCategory
+    if (category !== undefined) {
+      if (!Array.isArray(category)) {
+        return res
+          .status(400)
+          .json(new ApiError(400, "Category must be an array"));
+      }
+      updateData.category = category.map((c) => String(c).trim());
+    }
+
+    if (subCategory !== undefined) {
+      if (!Array.isArray(subCategory)) {
+        return res
+          .status(400)
+          .json(new ApiError(400, "SubCategory must be an array"));
+      }
+      updateData.subCategory = subCategory.map((sc) => String(sc).trim());
+    }
+
+    if (ProductCategory !== undefined) {
+      if (!Array.isArray(ProductCategory)) {
+        return res
+          .status(400)
+          .json(new ApiError(400, "ProductCategory must be an array"));
+      }
+      updateData.ProductCategory = ProductCategory.map((pc) =>
+        String(pc).trim()
+      );
     }
 
     if (Object.keys(updateData).length === 0) {
@@ -777,10 +822,46 @@ const DeleteCoupons = async (req, res) => {
   }
 };
 
+const RemoveCoupon = async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    const cart = await CartModel.findOne({ user: userId });
+    if (!cart) {
+      return res.status(404).json(new ApiError(404, "Cart not found"));
+    }
+
+    cart.discount = 0;
+    cart.discountValue = 0;
+    cart.discountType = null;
+    cart.couponCode = null;
+
+    let productTotal = cart.items.reduce(
+      (acc, item) => acc + item.quantity * item.price,
+      0
+    );
+    let tiffinTotal = cart.tiffins.reduce(
+      (acc, tiffin) => acc + parseFloat(tiffin.totalAmount || 0),
+      0
+    );
+    cart.totalAmount = productTotal + tiffinTotal;
+
+    await cart.save();
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, null, "Coupon removed successfully"));
+  } catch (error) {
+    console.error("Error removing coupon:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 module.exports = {
   getAllCoupons,
   CreateCoupons,
   EditCoupons,
   ValidateCoupon,
   DeleteCoupons,
+  RemoveCoupon,
 };
