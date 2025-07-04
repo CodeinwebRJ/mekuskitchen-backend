@@ -16,6 +16,7 @@ const getAllCoupons = async (req, res) => {
       expired,
       category,
       subCategory,
+      code,
       productCategory,
     } = req.query;
 
@@ -28,6 +29,10 @@ const getAllCoupons = async (req, res) => {
           .json(new ApiError(400, "isActive must be 'true' or 'false'"));
       }
       query.isActive = isActive === "true";
+    }
+
+    if (code) {
+      query.code = { $regex: new RegExp(code, "i") };
     }
 
     if (discountType) {

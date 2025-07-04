@@ -39,14 +39,38 @@ const sendQuary = async (req, res) => {
 
 const getAllQuarys = async (req, res) => {
   try {
-    const contacts = await ContactModel.find().sort({ createdAt: -1 });
+    const { search } = req.query;
+
+    let filter = {};
+    if (search) {
+      const searchRegex = new RegExp(search, "i");
+
+      if (!isNaN(search)) {
+        filter = {
+          phone: { $regex: searchRegex },
+        };
+      } else {
+        filter = {
+          $or: [
+            { name: searchRegex },
+            { email: searchRegex },
+            { message: searchRegex },
+          ],
+        };
+      }
+    }
+
+    const contacts = await ContactModel.find(filter).sort({ createdAt: -1 });
+
     return res
       .status(200)
       .json(
         new ApiResponse(
           200,
           contacts,
-          "All contact queries fetched successfully"
+          contacts.length > 0
+            ? "Contact queries fetched successfully"
+            : "No contact queries found"
         )
       );
   } catch (error) {

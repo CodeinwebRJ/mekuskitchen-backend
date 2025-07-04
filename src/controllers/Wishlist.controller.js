@@ -30,7 +30,7 @@ const addToWishlist = async (req, res) => {
   try {
     const { userid, productId } = req.body;
 
-    if (!productId) {
+    if (!userid || !productId) {
       return res
         .status(400)
         .json(new ApiError(400, "User ID and Product ID are required"));
@@ -42,12 +42,13 @@ const addToWishlist = async (req, res) => {
 
     let wishlist = await WishlistModel.findOne({ userid });
 
+    // If wishlist exists
     if (wishlist) {
-      const alreadyExists = wishlist.items.some(
-        (item) => item.toString() === productId.toString()
+      const isDuplicate = wishlist.items.some(
+        (item) => item.toString() === productId
       );
 
-      if (alreadyExists) {
+      if (isDuplicate) {
         return res
           .status(409)
           .json(new ApiError(409, "Product already in wishlist"));
@@ -55,23 +56,27 @@ const addToWishlist = async (req, res) => {
 
       wishlist.items.push(productId);
       await wishlist.save();
-      wishlist = await WishlistModel.findById(wishlist._id).populate("items");
     } else {
+      // Create new wishlist
       wishlist = await WishlistModel.create({
         userid,
         items: [productId],
       });
-      wishlist = await WishlistModel.findById(wishlist._id).populate("items");
     }
+
+    // Populate product data
+    wishlist = await WishlistModel.findById(wishlist._id).populate("items");
 
     return res
       .status(200)
       .json(new ApiResponse(200, wishlist, "Added to wishlist"));
   } catch (error) {
     console.error("Error in addToWishlist:", error);
+
     if (error.name === "CastError") {
       return res.status(400).json(new ApiError(400, "Invalid data format"));
     }
+
     return res.status(500).json(new ApiError(500, "Internal Server Error"));
   }
 };
@@ -80,23 +85,31 @@ const removeItems = async (req, res) => {
   try {
     const { userid, productId } = req.body;
 
-    if (!productId) {
-      return res.status(400).json(new ApiError(400, "Product ID is required"));
+    if (!userid || !productId) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "User ID and Product ID are required"));
+    }
+
+    if (!mongoose.isValidObjectId(productId)) {
+      return res.status(400).json(new ApiError(400, "Invalid Product ID"));
     }
 
     const updatedWishlist = await WishlistModel.findOneAndUpdate(
-      { userid: userid },
+      { userid },
       { $pull: { items: productId } },
       { new: true }
     );
 
     if (!updatedWishlist) {
-      return res.status(404).json({ message: "Wishlist not found." });
+      return res.status(404).json(new ApiError(404, "Wishlist not found"));
     }
 
     return res
       .status(200)
-      .json(new ApiResponse(200, null, "Product removed from wishlist"));
+      .json(
+        new ApiResponse(200, updatedWishlist, "Product removed from wishlist")
+      );
   } catch (error) {
     console.error("Error removing item from wishlist:", error);
     return res.status(500).json(new ApiError(500, "Internal Server Error"));

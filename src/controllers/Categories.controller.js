@@ -206,16 +206,90 @@ const CreateSubSubCategory = async (req, res) => {
 
 const getCategoryList = async (req, res) => {
   try {
-    const categories = await CategoryModel.find({ isActive: true })
-      .select("name subCategories isActive createdAt updatedAt")
-      .lean();
+    const { categorySearch, subCategorySearch, productCategorySearch } =
+      req.query;
 
-    if (!categories || categories.length === 0) {
-      return res
-        .status(404)
-        .json(new ApiError(404, "No active categories found"));
-    }
+    const categoryRegex = new RegExp(categorySearch, "i");
+    const subCategoryRegex = new RegExp(subCategorySearch, "i");
+    const productCategoryRegex = new RegExp(productCategorySearch, "i");
 
+    const categories = await CategoryModel.aggregate([
+      {
+        $match: {
+          isActive: true,
+          ...(categorySearch && { name: { $regex: categoryRegex } }),
+          ...(subCategorySearch && {
+            "subCategories.name": { $regex: subCategoryRegex },
+          }),
+          ...(productCategorySearch && {
+            "subCategories.subSubCategories.name": {
+              $regex: productCategoryRegex,
+            },
+          }),
+        },
+      },
+      {
+        $project: {
+          name: 1,
+          isActive: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          subCategories: {
+            $filter: {
+              input: "$subCategories",
+              as: "subCat",
+              cond: {
+                $and: [
+                  { $eq: ["$$subCat.isActive", true] },
+                  {
+                    $cond: [
+                      { $ne: [subCategorySearch, ""] },
+                      {
+                        $regexMatch: {
+                          input: "$$subCat.name",
+                          regex: subCategoryRegex,
+                        },
+                      },
+                      true,
+                    ],
+                  },
+                  {
+                    $cond: [
+                      { $ne: [productCategorySearch, ""] },
+                      {
+                        $gt: [
+                          {
+                            $size: {
+                              $filter: {
+                                input: "$$subCat.subSubCategories",
+                                as: "subSubCat",
+                                cond: {
+                                  $and: [
+                                    { $eq: ["$$subSubCat.isActive", true] },
+                                    {
+                                      $regexMatch: {
+                                        input: "$$subSubCat.name",
+                                        regex: productCategoryRegex,
+                                      },
+                                    },
+                                  ],
+                                },
+                              },
+                            },
+                          },
+                          0,
+                        ],
+                      },
+                      true,
+                    ],
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+    ]);
     return res
       .status(200)
       .json(

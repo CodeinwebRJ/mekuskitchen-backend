@@ -149,8 +149,14 @@ const getOrderById = async (req, res) => {
 
 const getAllOrders = async (req, res) => {
   try {
-    const { startDate, endDate, specificDate, dateRange, orderStatus } =
-      req.query;
+    const {
+      startDate,
+      endDate,
+      specificDate,
+      dateRange,
+      orderStatus,
+      orderId,
+    } = req.query;
 
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
@@ -160,6 +166,10 @@ const getAllOrders = async (req, res) => {
 
     if (orderStatus) {
       filter.orderStatus = orderStatus;
+    }
+
+    if (orderId) {
+      filter.orderId = orderId;
     }
 
     if (startDate || endDate || specificDate || dateRange) {
@@ -226,7 +236,8 @@ const getAllOrders = async (req, res) => {
     const orders = await OrderModel.find(filter)
       .sort({ Orderdate: -1 })
       .skip(skip)
-      .limit(limit);
+      .limit(limit)
+      .lean();
 
     return res.status(200).json(
       new ApiResponse(
