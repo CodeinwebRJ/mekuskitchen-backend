@@ -18,7 +18,7 @@ const createOrder = async (req, res) => {
       taxAmount = 0,
       notes = "",
       deliveryTime,
-      selfPickup,
+      selfPickup = false,
     } = req.body;
 
     if (!userId || !orderId || !cartId || !cartAmount || !paymentMethod) {
@@ -27,7 +27,7 @@ const createOrder = async (req, res) => {
         .json(
           new ApiError(
             400,
-            "Missing required fields: userId, cartId, addressId, paymentMethod, and cartAmount are required"
+            "Missing required fields: userId, cartId, orderId, paymentMethod, and cartAmount are required"
           )
         );
     }
@@ -51,26 +51,19 @@ const createOrder = async (req, res) => {
     const cartItemsWithProducts = await Promise.all(
       (cart.items || []).map(async (item) => {
         const product = await ProductModel.findById(item.product_id);
-
         if (!product) {
           throw new Error(`Product not found for ID: ${item.product_id}`);
         }
 
-        if (product.stock !== undefined && product.stock < item.quantity) {
-          throw new Error(
-            `Insufficient stock for product: ${product.name}. Requested: ${item.quantity}, Available: ${product.stock}`
-          );
-        }
-
         return {
           ...(item.toObject?.() || item),
-          productDetails: product || null,
+          productDetails: product,
         };
       })
     );
 
     const grandTotal = parseFloat(
-      (Number(cartAmount || 0) + Number(taxAmount || 0)).toFixed(2)
+      (Number(cartAmount) + Number(taxAmount)).toFixed(2)
     );
 
     const newOrder = await OrderModel.create({
@@ -88,18 +81,76 @@ const createOrder = async (req, res) => {
       taxAmount,
       grandTotal,
       notes,
-      selfPickup: selfPickup ?? false,
+      selfPickup,
       cartItems: cartItemsWithProducts,
       Orderdate: new Date(),
     });
 
     await Promise.all(
       (cart.items || []).map(async (item) => {
-        await ProductModel.findByIdAndUpdate(
-          item.product_id,
-          { $inc: { stock: -item.quantity } },
-          { new: true }
-        );
+        const product = await ProductModel.findById(item.product_id);
+        if (!product) return;
+
+        if (!product.manageInventory) return;
+
+        if (item.sku?.skuId) {
+          const updatedSkus = product.sku.map((sku) => {
+            if (sku._id.toString() !== item.sku.skuId.toString()) {
+              return sku;
+            }
+
+            const detailsObject =
+              sku.details instanceof Map
+                ? Object.fromEntries(sku.details.entries())
+                : sku.details;
+
+            const combinationsArray = detailsObject?.combinations || [];
+
+            if (combinationsArray.length > 0 && item.combination) {
+              const updatedCombinations = combinationsArray.map((combo) => {
+                const isMatch = Object.entries(item.combination).every(
+                  ([key, value]) => combo[key] === value
+                );
+
+                return {
+                  ...combo,
+                  Stock: isMatch
+                    ? Math.max((combo.Stock || 0) - item.quantity, 0)
+                    : combo.Stock,
+                };
+              });
+
+              return {
+                ...(sku.toObject?.() || sku),
+                details: {
+                  ...detailsObject,
+                  combinations: updatedCombinations,
+                },
+              };
+            } else {
+              return {
+                ...(sku.toObject?.() || sku),
+                details: {
+                  ...detailsObject,
+                  Stock: Math.max(
+                    (detailsObject?.Stock || 0) - item.quantity,
+                    0
+                  ),
+                },
+              };
+            }
+          });
+
+          await ProductModel.findByIdAndUpdate(item.product_id, {
+            $set: { sku: updatedSkus },
+          });
+        } else {
+          await ProductModel.findByIdAndUpdate(
+            item.product_id,
+            { $inc: { stock: -item.quantity } },
+            { new: true }
+          );
+        }
       })
     );
 
@@ -113,7 +164,7 @@ const createOrder = async (req, res) => {
 
     return res
       .status(201)
-      .json(new ApiResponse(201, newOrder, "Order created successfully"));
+      .json(new ApiResponse(200, newOrder, "Order created successfully"));
   } catch (error) {
     console.error("Create order error:", error);
     return res

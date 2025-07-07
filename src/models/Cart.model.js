@@ -59,8 +59,7 @@ const CartSchema = new mongoose.Schema(
           ],
         },
         combination: {
-          type: Map,
-          of: mongoose.Schema.Types.Mixed,
+          type: Object,
           default: {},
         },
       },

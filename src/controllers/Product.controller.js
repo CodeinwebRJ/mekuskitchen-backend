@@ -27,6 +27,7 @@ const getAllProducts = async (req, res) => {
       ProductCategory,
       brand,
       ratings,
+      variation,
       price,
       isActive,
     } = req.body;
@@ -96,6 +97,12 @@ const getAllProducts = async (req, res) => {
         const minRating = Math.min(...validRatings);
         query.avrageRating = { $gte: minRating };
       }
+    }
+    
+    if (variation === "product") {
+      query.$or = [{ sku: { $size: 0 } }, { sku: null }];
+    } else if (variation === "sku") {
+      query["sku.0"] = { $exists: true };
     }
 
     const sortStage = {};
@@ -171,6 +178,7 @@ const CreateProduct = async (req, res) => {
       SKUName,
       isTaxFree,
       currency,
+      manageInvantory,
       aboutItem,
     } = req.body;
 
@@ -222,8 +230,6 @@ const CreateProduct = async (req, res) => {
     const processedSkus = skuArray.map((skuItem) => ({
       details: skuItem || {},
     }));
-
-    console.log(processedSkus);
 
     if (sizes && Array.isArray(sizes)) {
       for (const size of sizes) {
@@ -282,6 +288,7 @@ const CreateProduct = async (req, res) => {
       tags: tags || [],
       isTaxFree: isTaxFree || false,
       aboutItem: aboutItem || [],
+      manageInvantory: manageInvantory || true,
       isActive: true,
     });
 

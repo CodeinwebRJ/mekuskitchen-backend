@@ -172,6 +172,8 @@ const addToCart = async (req, res) => {
       day,
     } = req.body;
 
+    console.log(combination);
+
     if (!user_id) {
       return res.status(400).json(new ApiError(400, "User ID is required"));
     }
@@ -259,6 +261,7 @@ const addToCart = async (req, res) => {
 
         const cleanCombination = { ...combination };
         delete cleanCombination.Price;
+        delete cleanCombination.Stock;
 
         const matchedCombination = combinations.find((comb) =>
           Object.keys(cleanCombination).every(
@@ -308,6 +311,7 @@ const addToCart = async (req, res) => {
         if (itemIndex > -1) {
           cart.items[itemIndex].quantity += parsedQuantity;
         } else {
+          console.log(cleanCombination);
           cart.items.push({
             product_id,
             quantity: parsedQuantity,
