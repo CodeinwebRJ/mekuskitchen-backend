@@ -54,19 +54,13 @@ const getAllTiffinMenu = async (req, res) => {
 
 const createTiffinMenu = async (req, res) => {
   try {
-    const { day, items, date, subTotal, totalAmount, description } = req.body;
-    const imageFiles = req.files;
+    const { day, items, date, subTotal, totalAmount, images, description } =
+      req.body;
 
     if (!day || !items || items.length === 0) {
       return res
         .status(400)
         .json(new ApiError(400, "Day and non-empty items array are required"));
-    }
-
-    if (!imageFiles || !Array.isArray(imageFiles) || imageFiles.length === 0) {
-      return res
-        .status(400)
-        .json(new ApiError(400, "At least one image file is required"));
     }
 
     if (
@@ -80,12 +74,10 @@ const createTiffinMenu = async (req, res) => {
         );
     }
 
-    // Validate date format
     if (date && isNaN(Date.parse(date))) {
       return res.status(400).json(new ApiError(400, "Invalid date format"));
     }
 
-    // Check for existing tiffin menu with the same day
     const existingTiffin = await TiffinMenuModel.findOne({ day });
     if (existingTiffin) {
       return res
@@ -93,7 +85,6 @@ const createTiffinMenu = async (req, res) => {
         .json(new ApiError(409, `Tiffin menu for ${day} already exists`));
     }
 
-    // Parse items if provided as a string
     let parsedItems;
     if (typeof items === "string") {
       try {
@@ -109,44 +100,17 @@ const createTiffinMenu = async (req, res) => {
       parsedItems = items;
     }
 
-    // Validate items is an array
     if (!Array.isArray(parsedItems)) {
       return res.status(400).json(new ApiError(400, "Items must be an array"));
     }
 
-    // Upload images to Cloudinary
-    const uploadPromises = imageFiles.map(async (file) => {
-      try {
-        const result = await uploadToCloudinary(file.path);
-        return result.secure_url;
-      } catch (uploadError) {
-        throw new Error(`Image upload failed: ${uploadError.message}`);
-      }
-    });
-
-    const uploadedUrls = await Promise.all(uploadPromises);
-
-    // Validate uploaded URLs
-    if (!uploadedUrls.every((url) => typeof url === "string" && url.trim())) {
-      return res
-        .status(400)
-        .json(new ApiError(400, "Invalid image URLs received from upload"));
-    }
-
-    // Format images for schema
-    const image_url = uploadedUrls.map((url, index) => ({
-      url,
-      isPrimary: index === 0,
-    }));
-
-    // Create new tiffin menu
     const newTiffin = await TiffinMenuModel.create({
       day,
       items: parsedItems,
       date: date ? new Date(date) : undefined,
       subTotal: subTotal ? String(subTotal) : "0",
       totalAmount: totalAmount ? String(totalAmount) : "0",
-      image_url,
+      images,
       description,
       category: "Tiffin",
       Active: true,
