@@ -33,51 +33,53 @@ const addToWishlist = async (req, res) => {
     if (!userid || !productId) {
       return res
         .status(400)
-        .json(new ApiError(400, "User ID and Product ID are required"));
+        .json(new ApiError(400, "Both User ID and Product ID are required"));
     }
 
-    if (!mongoose.isValidObjectId(productId)) {
-      return res.status(400).json(new ApiError(400, "Invalid Product ID"));
+    if (!productId) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "Invalid Product ID format"));
     }
 
     let wishlist = await WishlistModel.findOne({ userid });
 
-    // If wishlist exists
     if (wishlist) {
-      const isDuplicate = wishlist.items.some(
+      const alreadyExists = wishlist.items.some(
         (item) => item.toString() === productId
       );
 
-      if (isDuplicate) {
+      if (alreadyExists) {
         return res
           .status(409)
-          .json(new ApiError(409, "Product already in wishlist"));
+          .json(new ApiError(409, "Product already exists in wishlist"));
       }
 
       wishlist.items.push(productId);
       await wishlist.save();
     } else {
-      // Create new wishlist
       wishlist = await WishlistModel.create({
         userid,
         items: [productId],
       });
     }
 
-    // Populate product data
-    wishlist = await WishlistModel.findById(wishlist._id).populate("items");
+    const populatedWishlist = await WishlistModel.findById(
+      wishlist._id
+    ).populate("items");
 
     return res
       .status(200)
-      .json(new ApiResponse(200, wishlist, "Added to wishlist"));
+      .json(
+        new ApiResponse(
+          200,
+          populatedWishlist,
+          "Product added to wishlist successfully"
+        )
+      );
   } catch (error) {
-    console.error("Error in addToWishlist:", error);
-
-    if (error.name === "CastError") {
-      return res.status(400).json(new ApiError(400, "Invalid data format"));
-    }
-
-    return res.status(500).json(new ApiError(500, "Internal Server Error"));
+    console.error("Error in addToWishlist:", error.message);
+    return res.status(500).json(new ApiError(500, "Internal server error"));
   }
 };
 
