@@ -6,6 +6,101 @@ const ProductModel = require("../models/Product.model");
 const TaxModel = require("../models/Tax.model");
 const mongoose = require("mongoose");
 
+const formatUserCart = async (cart, provinceCode) => {
+  let taxConfig = null;
+  if (provinceCode) {
+    taxConfig = await TaxModel.findOne({ provinceCode });
+  }
+
+  let totalAmount = 0;
+  let totalFederalTax = 0;
+  let totalProvinceTax = 0;
+
+  const itemsWithDetails = await Promise.all(
+    cart.items.map(async (item) => {
+      const product = await ProductModel.findById(item.product_id).lean();
+      const price = parseFloat(item.price || 0);
+      const quantity = parseInt(item.quantity || 1);
+      const itemSubtotal = price * quantity;
+
+      let itemFederalTax = 0;
+      let itemProvinceTax = 0;
+
+      if (product?.category && !product?.isTaxFree && taxConfig?.taxes) {
+        const categoryTax = taxConfig.taxes.find(
+          (t) => t.category === product.category
+        );
+        if (categoryTax) {
+          itemFederalTax = (itemSubtotal * categoryTax.federalTax) / 100;
+          itemProvinceTax = (itemSubtotal * categoryTax.provinceTax) / 100;
+        }
+      }
+
+      totalAmount += itemSubtotal;
+      totalFederalTax += itemFederalTax;
+      totalProvinceTax += itemProvinceTax;
+
+      return {
+        ...item.toObject(),
+        productDetails: product || null,
+        itemTax: (itemFederalTax + itemProvinceTax).toFixed(2),
+      };
+    })
+  );
+
+  const tiffinsWithDetails = await Promise.all(
+    cart.tiffins.map(async (tiffin) => {
+      const tiffinMenu = await TiffinModel.findById(tiffin.tiffinMenuId).lean();
+      const tiffinTotal = parseFloat(tiffin.totalAmount || 0);
+
+      let tiffinFederalTax = 0;
+      let tiffinProvinceTax = 0;
+
+      if (
+        tiffinMenu?.taxCategory &&
+        !tiffinMenu?.isTaxFree &&
+        taxConfig?.taxes
+      ) {
+        const categoryTax = taxConfig.taxes.find(
+          (t) => t.category === tiffinMenu.taxCategory
+        );
+        if (categoryTax) {
+          tiffinFederalTax = (tiffinTotal * categoryTax.federalTax) / 100;
+          tiffinProvinceTax = (tiffinTotal * categoryTax.provinceTax) / 100;
+        }
+      }
+
+      totalAmount += tiffinTotal;
+      totalFederalTax += tiffinFederalTax;
+      totalProvinceTax += tiffinProvinceTax;
+
+      return {
+        ...tiffin.toObject(),
+        tiffinMenuDetails: tiffinMenu || null,
+        tiffinTax: (tiffinFederalTax + tiffinProvinceTax).toFixed(2),
+      };
+    })
+  );
+
+  const totalTax = totalFederalTax + totalProvinceTax;
+  const discount = parseFloat(cart.discount || 0);
+  const grandTotal = totalAmount - discount;
+
+  return {
+    ...cart.toObject(),
+    items: itemsWithDetails,
+    tiffins: tiffinsWithDetails,
+    totalAmount: totalAmount.toFixed(2),
+    totalFederalTax: totalFederalTax.toFixed(2),
+    totalProvinceTax: totalProvinceTax.toFixed(2),
+    totalTax: totalTax.toFixed(2),
+    discount: discount.toFixed(2),
+    discountType: cart.discountType || null,
+    couponCode: cart.couponCode || null,
+    grandTotal: grandTotal.toFixed(2),
+  };
+};
+
 const getUserCart = async (req, res) => {
   try {
     const { userId } = req.params;
@@ -153,101 +248,6 @@ const getUserCart = async (req, res) => {
       .status(500)
       .json(new ApiError(500, "Internal Server Error", [error.message]));
   }
-};
-
-const formatUserCart = async (cart, provinceCode) => {
-  let taxConfig = null;
-  if (provinceCode) {
-    taxConfig = await TaxModel.findOne({ provinceCode });
-  }
-
-  let totalAmount = 0;
-  let totalFederalTax = 0;
-  let totalProvinceTax = 0;
-
-  const itemsWithDetails = await Promise.all(
-    cart.items.map(async (item) => {
-      const product = await ProductModel.findById(item.product_id).lean();
-      const price = parseFloat(item.price || 0);
-      const quantity = parseInt(item.quantity || 1);
-      const itemSubtotal = price * quantity;
-
-      let itemFederalTax = 0;
-      let itemProvinceTax = 0;
-
-      if (product?.category && !product?.isTaxFree && taxConfig?.taxes) {
-        const categoryTax = taxConfig.taxes.find(
-          (t) => t.category === product.category
-        );
-        if (categoryTax) {
-          itemFederalTax = (itemSubtotal * categoryTax.federalTax) / 100;
-          itemProvinceTax = (itemSubtotal * categoryTax.provinceTax) / 100;
-        }
-      }
-
-      totalAmount += itemSubtotal;
-      totalFederalTax += itemFederalTax;
-      totalProvinceTax += itemProvinceTax;
-
-      return {
-        ...item.toObject(),
-        productDetails: product || null,
-        itemTax: (itemFederalTax + itemProvinceTax).toFixed(2),
-      };
-    })
-  );
-
-  const tiffinsWithDetails = await Promise.all(
-    cart.tiffins.map(async (tiffin) => {
-      const tiffinMenu = await TiffinModel.findById(tiffin.tiffinMenuId).lean();
-      const tiffinTotal = parseFloat(tiffin.totalAmount || 0);
-
-      let tiffinFederalTax = 0;
-      let tiffinProvinceTax = 0;
-
-      if (
-        tiffinMenu?.taxCategory &&
-        !tiffinMenu?.isTaxFree &&
-        taxConfig?.taxes
-      ) {
-        const categoryTax = taxConfig.taxes.find(
-          (t) => t.category === tiffinMenu.taxCategory
-        );
-        if (categoryTax) {
-          tiffinFederalTax = (tiffinTotal * categoryTax.federalTax) / 100;
-          tiffinProvinceTax = (tiffinTotal * categoryTax.provinceTax) / 100;
-        }
-      }
-
-      totalAmount += tiffinTotal;
-      totalFederalTax += tiffinFederalTax;
-      totalProvinceTax += tiffinProvinceTax;
-
-      return {
-        ...tiffin.toObject(),
-        tiffinMenuDetails: tiffinMenu || null,
-        tiffinTax: (tiffinFederalTax + tiffinProvinceTax).toFixed(2),
-      };
-    })
-  );
-
-  const totalTax = totalFederalTax + totalProvinceTax;
-  const discount = parseFloat(cart.discount || 0);
-  const grandTotal = totalAmount - discount;
-
-  return {
-    ...cart.toObject(),
-    items: itemsWithDetails,
-    tiffins: tiffinsWithDetails,
-    totalAmount: totalAmount.toFixed(2),
-    totalFederalTax: totalFederalTax.toFixed(2),
-    totalProvinceTax: totalProvinceTax.toFixed(2),
-    totalTax: totalTax.toFixed(2),
-    discount: discount.toFixed(2),
-    discountType: cart.discountType || null,
-    couponCode: cart.couponCode || null,
-    grandTotal: grandTotal.toFixed(2),
-  };
 };
 
 const addToCart = async (req, res) => {
