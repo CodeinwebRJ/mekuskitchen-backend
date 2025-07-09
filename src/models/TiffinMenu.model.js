@@ -4,15 +4,6 @@ const TiffinMenuSchema = new mongoose.Schema(
   {
     day: {
       type: String,
-      enum: [
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday",
-        "Saturday",
-        "Sunday",
-      ],
       required: true,
     },
     items: [
@@ -38,6 +29,9 @@ const TiffinMenuSchema = new mongoose.Schema(
       },
     ],
     date: {
+      type: String,
+    },
+    endDate: {
       type: String,
     },
     subTotal: {
