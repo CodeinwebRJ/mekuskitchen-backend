@@ -496,9 +496,6 @@ const EditProduct = async (req, res) => {
       updateData.stock = stock;
     }
 
-    console.log(manageInvantory)
-    console.log(isTaxFree)
-
     if (dietaryPreference) updateData.dietaryPreference = dietaryPreference;
     if (category) updateData.category = category;
     if (subCategory) updateData.subCategory = subCategory;
