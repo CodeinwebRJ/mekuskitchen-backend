@@ -3,8 +3,6 @@ const ApiError = require("../utils/ApiError");
 const ProductModel = require("../models/Product.model");
 const TiffinModel = require("../models/TiffinMenu.model");
 const ReviewModel = require("../models/Review.model");
-const { uploadToCloudinary } = require("../utils/Cloudinary.utils");
-const fs = require("fs");
 const mongoose = require("mongoose");
 
 const safeParseJSON = (data, fieldName) => {
@@ -746,6 +744,40 @@ const HomePageProduct = async (req, res) => {
   }
 };
 
+const SearchProducts = async (req, res) => {
+  try {
+    const { search } = req.query;
+
+    if (!search || search.trim() === "") {
+      return res
+        .status(200)
+        .json(new ApiError(400, "Search query is required."));
+    }
+
+    const searchRegex = new RegExp(search, "i");
+
+    const products = await ProductModel.find({
+      $or: [
+        { name: { $regex: searchRegex } },
+        { SKUName: { $regex: searchRegex } },
+        { tags: { $in: [searchRegex] } },
+      ],
+      isActive: true,
+    });
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, products, "product get successfully"));
+  } catch (error) {
+    console.error("Search error:", error);
+    return res
+      .status(500)
+      .json(
+        new ApiError(500, "Something went wrong while searching for products.")
+      );
+  }
+};
+
 module.exports = {
   getAllProducts,
   CreateProduct,
@@ -754,4 +786,5 @@ module.exports = {
   EditProduct,
   DeleteProduct,
   HomePageProduct,
+  SearchProducts,
 };
