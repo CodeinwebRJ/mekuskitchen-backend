@@ -60,42 +60,38 @@ const UploadImages = async (req, res) => {
       uploadToCloudinary(file.path)
     );
 
-    console.log(uploadPromises);
     const uploadResults = await Promise.all(uploadPromises);
 
-    console.log(uploadResults);
-    
     const uploadedImages = uploadResults.map((result, index) => ({
       url: result.secure_url,
       isPrimary: index === 0,
     }));
-    
-    console.log(uploadedImages);
+
     if (
       !uploadedImages.every(
         (img) => typeof img.url === "string" && img.url.trim() !== ""
       )
     ) {
       return res
-      .status(400)
-      .json(new ApiError(400, "All uploaded images must have valid URLs"));
+        .status(400)
+        .json(new ApiError(400, "All uploaded images must have valid URLs"));
     }
-    
+
     return res
-    .status(200)
-    .json(
-      new ApiResponse(
-        200,
-        { images: uploadedImages },
-        "Images uploaded successfully"
-      )
-    );
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          { images: uploadedImages },
+          "Images uploaded successfully"
+        )
+      );
   } catch (error) {
     console.error("Error uploading images:", error);
     console.log(error);
     return res
-    .status(error.statusCode || 500)
-    .json(
+      .status(error.statusCode || 500)
+      .json(
         new ApiError(
           error.statusCode || 500,
           error.message || "Internal server error"
