@@ -2,6 +2,7 @@ const ApiError = require("../utils/ApiError");
 const ApiResponse = require("../utils/ApiResponse");
 const ReviewModel = require("../models/Review.model");
 const ProductModel = require("../models/Product.model");
+const TiffinMenuModel = require("../models/TiffinMenu.model");
 
 const getAllReviews = async (req, res) => {
   try {
@@ -136,9 +137,117 @@ const getTopRatedProducts = async (req, res) => {
   }
 };
 
+const addTiffinReview = async (req, res) => {
+  try {
+    const { rating, comment, product_id, user_id } = req.body;
+
+    if (!product_id) {
+      return res.status(400).json(new ApiError(400, "Tiffin ID is required"));
+    }
+
+    if (!rating || rating < 1 || rating > 5) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "Rating must be between 1 and 5"));
+    }
+
+    const tiffin = await TiffinMenuModel.findById(product_id);
+    if (!tiffin) {
+      return res.status(404).json(new ApiError(404, "Tiffin not found"));
+    }
+
+    const review = await ReviewModel.create({
+      product_id,
+      user_id,
+      rating,
+      comment,
+      isTiffin: true,
+    });
+
+    const result = await ReviewModel.aggregate([
+      { $match: { product_id: product_id.toString() } },
+      { $group: { _id: "$product_id", avgRating: { $avg: "$rating" } } },
+    ]);
+
+    const newAverageRating = result.length > 0 ? result[0].avgRating : 0;
+
+    await TiffinMenu.findByIdAndUpdate(
+      product_id,
+      { averageRating: newAverageRating },
+      { new: true }
+    );
+
+    return res
+      .status(201)
+      .json(new ApiResponse(201, review, "Review added successfully"));
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json(new ApiError(500, "Internal Server Error"));
+  }
+};
+
+const getTiffinReviews = async (req, res) => {
+  try {
+    const { tiffinId } = req.params;
+
+    if (!tiffinId) {
+      return res.status(400).json(new ApiError(400, "Tiffin ID is required"));
+    }
+
+    const reviews = await ReviewModel.find({
+      product_id: tiffinId,
+      isTiffin: true,
+    }).sort({ createdAt: -1 });
+
+    if (!reviews || reviews.length === 0) {
+      return res
+        .status(200)
+        .json(new ApiResponse(200, [], "No reviews found for this tiffin"));
+    }
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(200, reviews, "Tiffin reviews fetched successfully")
+      );
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json(new ApiError(500, "Internal Server Error"));
+  }
+};
+
+const deleteTiffinReview = async (req, res) => {
+  try {
+    const { id, user_id } = req.body;
+
+    const review = await ReviewModel.findById(id);
+    if (!review) {
+      return res.status(404).json(new ApiError(404, "Review not found"));
+    }
+
+    if (review.user_id?.toString() !== user_id) {
+      return res
+        .status(403)
+        .json(new ApiError(403, "Not authorized to delete this review"));
+    }
+
+    await ReviewModel.findByIdAndDelete(id);
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, null, "Tiffin review deleted successfully"));
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json(new ApiError(500, "Internal Server Error"));
+  }
+};
+
 module.exports = {
   getAllReviews,
   addReviews,
   deleteReviews,
   getTopRatedProducts,
+  addTiffinReview,
+  getTiffinReviews,
+  deleteTiffinReview,
 };

@@ -4,7 +4,8 @@ const CustomizedItemSchema = new mongoose.Schema({
   name: { type: String },
   price: { type: String },
   quantity: { type: String },
-  quantityUnit: { type: String },
+  weight: { type: String },
+  weightUnit: { type: String },
   description: { type: String },
   included: { type: Boolean, default: true },
 });
@@ -16,6 +17,7 @@ const TiffinEntrySchema = new mongoose.Schema({
   orderDate: { type: String },
   day: { type: String },
   quantity: { type: Number, default: 1 },
+  deliveryDate: { type: String },
   totalAmount: { type: String },
 });
 

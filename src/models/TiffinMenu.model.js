@@ -17,7 +17,7 @@ const TiffinMenuSchema = new mongoose.Schema(
         quantity: {
           type: Number,
         },
-        quantityUnit: {
+        weightUnit: {
           type: String,
         },
         weight: {
@@ -35,6 +35,9 @@ const TiffinMenuSchema = new mongoose.Schema(
       type: String,
     },
     subTotal: {
+      type: String,
+    },
+    tiffinCategory: {
       type: String,
     },
     image_url: [
@@ -56,6 +59,10 @@ const TiffinMenuSchema = new mongoose.Schema(
     },
     category: {
       type: String,
+    },
+    averageRating: {
+      type: Number,
+      default: 0,
     },
     aboutItem: [
       {

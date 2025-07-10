@@ -6,6 +6,14 @@ const ProductModel = require("../models/Product.model");
 const TaxModel = require("../models/Tax.model");
 const mongoose = require("mongoose");
 
+const formatDateOnly = (dateStr) => {
+  try {
+    return new Date(dateStr).toISOString().split("T")[0];
+  } catch {
+    return dateStr;
+  }
+};
+
 const formatUserCart = async (cart, provinceCode) => {
   let taxConfig = null;
   if (provinceCode) {
@@ -262,6 +270,7 @@ const addToCart = async (req, res) => {
       combination,
       tiffinMenuId,
       customizedItems,
+      deliveryDate,
       specialInstructions,
       orderDate,
       day,
@@ -283,33 +292,71 @@ const addToCart = async (req, res) => {
       });
     }
 
+    // ✅ Tiffin Cart Handling
     if (isTiffinCart) {
-      if (!tiffinMenuId || !customizedItems || !orderDate || !day) {
+      if (
+        !tiffinMenuId ||
+        !Array.isArray(customizedItems) ||
+        customizedItems.length === 0 ||
+        !orderDate ||
+        !day
+      ) {
         return res
           .status(400)
-          .json(new ApiError(400, "Missing required tiffin fields"));
+          .json(new ApiError(400, "Missing or invalid tiffin fields"));
       }
 
-      const tiffinTotal = customizedItems.reduce((sum, item) => {
+      const tiffinQuantity = parseInt(quantity || 1);
+
+      const singleTiffinTotal = customizedItems.reduce((sum, item) => {
         const itemPrice = parseFloat(item.price || 0);
-        const itemQuantity = parseFloat(item.quantity || 1);
-        return sum + itemPrice * itemQuantity;
+        const itemQty = parseInt(item.quantity || 1);
+        return sum + itemPrice * itemQty;
       }, 0);
 
-      const tiffinQuantity = parseInt(quantity) || 1;
+      const totalTiffinAmount = (singleTiffinTotal * tiffinQuantity).toFixed(2);
 
-      const tiffinIndex = cart.tiffins.findIndex(
-        (t) =>
-          t.tiffinMenuId === tiffinMenuId &&
-          t.day === day &&
-          t.orderDate === orderDate
-      );
+      // Simplified version of customized items for comparison
+      const simplifiedNewItems = customizedItems
+        .map((item) => ({
+          name: item.name?.trim(),
+          quantity: parseInt(item.quantity),
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
 
-      if (tiffinIndex > -1) {
-        cart.tiffins[tiffinIndex].quantity += tiffinQuantity;
-        cart.tiffins[tiffinIndex].totalAmount = (
-          tiffinTotal * cart.tiffins[tiffinIndex].quantity
-        ).toString();
+      const matchingIndex = cart.tiffins.findIndex((t) => {
+        if (
+          t.tiffinMenuId !== tiffinMenuId ||
+          t.day !== day ||
+          t.orderDate !== orderDate ||
+          t.deliveryDate !== deliveryDate
+        )
+          return false;
+
+        const simplifiedExisting = t.customizedItems
+          .map((item) => ({
+            name: item.name?.trim(),
+            quantity: parseInt(item.quantity),
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+        if (simplifiedExisting.length !== simplifiedNewItems.length)
+          return false;
+
+        return simplifiedExisting.every((item, i) => {
+          return (
+            item.name === simplifiedNewItems[i].name &&
+            item.quantity === simplifiedNewItems[i].quantity
+          );
+        });
+      });
+
+      if (matchingIndex !== -1) {
+        const existing = cart.tiffins[matchingIndex];
+        existing.quantity += tiffinQuantity;
+        existing.totalAmount = (singleTiffinTotal * existing.quantity).toFixed(
+          2
+        );
       } else {
         cart.tiffins.push({
           tiffinMenuId,
@@ -317,8 +364,9 @@ const addToCart = async (req, res) => {
           specialInstructions: specialInstructions || "",
           orderDate,
           day,
+          deliveryDate: deliveryDate || "",
           quantity: tiffinQuantity,
-          totalAmount: (tiffinTotal * tiffinQuantity).toString(),
+          totalAmount: totalTiffinAmount,
         });
       }
     } else {
@@ -448,7 +496,6 @@ const addToCart = async (req, res) => {
       }
     }
 
-    // Recalculate totalAmount
     const productTotal = cart.items.reduce(
       (sum, item) => sum + (item.price || 0) * (item.quantity || 0),
       0

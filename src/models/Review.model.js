@@ -17,6 +17,10 @@ const ReviewSchema = new mongoose.Schema(
     comment: {
       type: String,
     },
+    isTiffin: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,
