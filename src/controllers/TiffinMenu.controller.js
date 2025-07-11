@@ -13,7 +13,7 @@ const validDays = [
   "Sunday",
 ];
 
-const tryParseJson = (input, fieldName, res) => {
+const tryParseJson = (input, fieldName) => {
   try {
     return typeof input === "string" ? JSON.parse(input) : input;
   } catch {
@@ -23,11 +23,11 @@ const tryParseJson = (input, fieldName, res) => {
 
 const getAllTiffinMenu = async (req, res) => {
   try {
-    const { Active, day, search } = req.query;
+    const { Active, day, search } = req.body;
     const filter = {};
 
-    if (Active !== undefined) filter.Active = Active === "true";
-    if (day?.trim()) filter.day = day;
+    if (Active !== undefined) filter.Active = Active;
+    if (day?.trim()) filter.day = day.trim();
 
     if (search?.trim()) {
       const regex = new RegExp(search.trim(), "i");
@@ -36,9 +36,8 @@ const getAllTiffinMenu = async (req, res) => {
 
     let tiffins = await TiffinMenuModel.find(filter).sort({ createdAt: -1 });
 
-    const dayOrder = validDays;
     tiffins = tiffins.sort(
-      (a, b) => dayOrder.indexOf(a.day) - dayOrder.indexOf(b.day)
+      (a, b) => validDays.indexOf(a.day) - validDays.indexOf(b.day)
     );
 
     const tiffinIds = tiffins.map((t) => t._id);
@@ -60,7 +59,11 @@ const getAllTiffinMenu = async (req, res) => {
     const tiffinsWithRating = tiffins.map((tiffin) => {
       const { averageRating = 0, totalReviews = 0 } =
         ratingMap[tiffin._id.toString()] || {};
-      return { ...tiffin.toObject(), averageRating, totalReviews };
+      return {
+        ...tiffin.toObject(),
+        averageRating: Number(averageRating.toFixed(1)),
+        totalReviews,
+      };
     });
 
     return res
@@ -83,6 +86,7 @@ const getAllTiffinMenu = async (req, res) => {
 const createTiffinMenu = async (req, res) => {
   try {
     let {
+      name,
       day,
       items,
       date,
@@ -91,17 +95,13 @@ const createTiffinMenu = async (req, res) => {
       totalAmount,
       image_url,
       description,
-      tiffinCategory,
+      isCustomized,
       aboutItem,
     } = req.body;
 
-    if (!day || !items) {
-      throw new ApiError(400, "Day and items are required");
-    }
-
-    if (!validDays.includes(day)) {
+    if (!day || !items) throw new ApiError(400, "Day and items are required");
+    if (!validDays.includes(day))
       throw new ApiError(400, `Invalid day. Use: ${validDays.join(", ")}`);
-    }
 
     items = tryParseJson(items, "items");
     if (!Array.isArray(items) || items.length === 0) {
@@ -111,12 +111,8 @@ const createTiffinMenu = async (req, res) => {
     image_url = tryParseJson(image_url || [], "image_url");
     aboutItem = tryParseJson(aboutItem || [], "aboutItem");
 
-    const existing = await TiffinMenuModel.findOne({ day });
-    if (existing) {
-      throw new ApiError(409, `Tiffin menu for ${day} already exists`);
-    }
-
     const newTiffin = await TiffinMenuModel.create({
+      name,
       day,
       items,
       date: date ? new Date(date) : undefined,
@@ -125,7 +121,7 @@ const createTiffinMenu = async (req, res) => {
       totalAmount: totalAmount ? String(totalAmount) : "0",
       image_url,
       description: description || "",
-      tiffinCategory,
+      isCustomized: isCustomized ?? false,
       aboutItem,
       category: "Tiffin",
       Active: true,
@@ -151,10 +147,11 @@ const createTiffinMenu = async (req, res) => {
 const editTiffinMenu = async (req, res) => {
   try {
     const { id } = req.params;
-    let tiffin = await TiffinMenuModel.findById(id);
+    const tiffin = await TiffinMenuModel.findById(id);
     if (!tiffin) throw new ApiError(404, "Tiffin menu not found");
 
     let {
+      name,
       day,
       items,
       date,
@@ -163,19 +160,17 @@ const editTiffinMenu = async (req, res) => {
       totalAmount,
       image_url,
       description,
-      tiffinCategory,
+      isCustomized,
       aboutItem,
       Active,
     } = req.body;
 
-    if (day && !validDays.includes(day)) {
-      throw new ApiError(400, `Invalid day. Use: ${validDays.join(", ")}`);
-    }
-
     if (items) {
       items = tryParseJson(items, "items");
       if (!Array.isArray(items))
-        throw new ApiError(400, "Items must be an array");
+        return res
+          .status(400)
+          .json(new ApiError(400, "Items must be an array"));
       tiffin.items = items;
     }
 
@@ -187,16 +182,19 @@ const editTiffinMenu = async (req, res) => {
     if (aboutItem) {
       aboutItem = tryParseJson(aboutItem, "aboutItem");
       if (!Array.isArray(aboutItem))
-        throw new ApiError(400, "aboutItem must be an array");
+        return res
+          .status(400)
+          .json(new ApiError(400, "aboutItem must be an array"));
       tiffin.aboutItem = aboutItem;
     }
 
     if (date && isNaN(Date.parse(date)))
-      throw new ApiError(400, "Invalid date");
+      return res.status(400).json(new ApiError(400, "Invalid date"));
     if (endDate && isNaN(Date.parse(endDate)))
-      throw new ApiError(400, "Invalid endDate");
+      return res.status(400).json(new ApiError(400, "Invalid endDate"));
 
     Object.assign(tiffin, {
+      name: name ?? tiffin.name,
       day: day || tiffin.day,
       date: date ? new Date(date) : tiffin.date,
       endDate: endDate ? new Date(endDate) : tiffin.endDate,
@@ -204,8 +202,8 @@ const editTiffinMenu = async (req, res) => {
       totalAmount:
         totalAmount !== undefined ? String(totalAmount) : tiffin.totalAmount,
       description: description ?? tiffin.description,
-      tiffinCategory: tiffinCategory ?? tiffin.tiffinCategory,
-      Active: typeof Active === "boolean" ? Active : tiffin.Active,
+      isCustomized: isCustomized ?? tiffin.isCustomized,
+      Active: Active ?? tiffin.Active,
     });
 
     await tiffin.save();

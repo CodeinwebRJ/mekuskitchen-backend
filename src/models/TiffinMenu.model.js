@@ -2,6 +2,9 @@ const mongoose = require("mongoose");
 
 const TiffinMenuSchema = new mongoose.Schema(
   {
+    name: {
+      type: String,
+    },
     day: {
       type: String,
       required: true,
@@ -37,8 +40,8 @@ const TiffinMenuSchema = new mongoose.Schema(
     subTotal: {
       type: String,
     },
-    tiffinCategory: {
-      type: String,
+    isCustomized: {
+      type: Boolean,
     },
     image_url: [
       {
@@ -75,12 +78,6 @@ const TiffinMenuSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-    toObject: {
-      transform: (doc, ret) => {
-        delete ret.Active;
-        return ret;
-      },
-    },
   }
 );
 

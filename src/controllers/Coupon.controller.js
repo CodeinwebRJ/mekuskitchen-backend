@@ -849,6 +849,14 @@ const RemoveCoupon = async (req, res) => {
   }
 };
 
+const ValidateTiffinCoupon = async (req, res) => {
+  try {
+    
+  } catch (error) {
+    console.log(error);
+  }
+};
+
 module.exports = {
   getAllCoupons,
   CreateCoupons,
@@ -856,4 +864,5 @@ module.exports = {
   ValidateCoupon,
   DeleteCoupons,
   RemoveCoupon,
+  ValidateTiffinCoupon,
 };

@@ -165,13 +165,13 @@ const addTiffinReview = async (req, res) => {
     });
 
     const result = await ReviewModel.aggregate([
-      { $match: { product_id: product_id.toString() } },
+      { $match: { product_id: product_id } },
       { $group: { _id: "$product_id", avgRating: { $avg: "$rating" } } },
     ]);
 
     const newAverageRating = result.length > 0 ? result[0].avgRating : 0;
 
-    await TiffinMenu.findByIdAndUpdate(
+    await TiffinMenuModel.findByIdAndUpdate(
       product_id,
       { averageRating: newAverageRating },
       { new: true }
