@@ -3,6 +3,8 @@ const ApiResponse = require("../utils/ApiResponse");
 const OrderModel = require("../models/Order.model");
 const CartModel = require("../models/Cart.model");
 const ProductModel = require("../models/Product.model");
+const AddressModel = require("../models/Address.model");
+const TiffinMenuModel = require("../models/TiffinMenu.model");
 
 const createOrder = async (req, res) => {
   try {
@@ -62,6 +64,22 @@ const createOrder = async (req, res) => {
       })
     );
 
+    const tiffinItemsWithDetails = await Promise.all(
+      (cart.tiffins || []).map(async (tiffin) => {
+        const tiffinMenu = await TiffinMenuModel.findById(tiffin.tiffinMenuId);
+        if (!tiffinMenu) {
+          throw new Error(
+            `Tiffin menu not found for ID: ${tiffin.tiffinMenuId}`
+          );
+        }
+
+        return {
+          ...(tiffin.toObject?.() || tiffin),
+          tiffinMenuDetails: tiffinMenu,
+        };
+      })
+    );
+
     const grandTotal = parseFloat(
       (Number(cartAmount) + Number(taxAmount)).toFixed(2)
     );
@@ -72,7 +90,7 @@ const createOrder = async (req, res) => {
       orderId,
       addressId: addressId || "",
       paymentMethod,
-      paymentStatus: "Pending",
+      paymentStatus: "Paid",
       orderStatus: "Pending",
       deliveryTime: deliveryTime ? new Date(deliveryTime) : undefined,
       cartAmount,
@@ -83,21 +101,18 @@ const createOrder = async (req, res) => {
       notes,
       selfPickup,
       cartItems: cartItemsWithProducts,
+      tiffinItems: tiffinItemsWithDetails,
       Orderdate: new Date(),
     });
 
     await Promise.all(
       (cart.items || []).map(async (item) => {
         const product = await ProductModel.findById(item.product_id);
-        if (!product) return;
-
-        if (!product.manageInventory) return;
+        if (!product || !product.manageInventory) return;
 
         if (item.sku?.skuId) {
           const updatedSkus = product.sku.map((sku) => {
-            if (sku._id.toString() !== item.sku.skuId.toString()) {
-              return sku;
-            }
+            if (sku._id.toString() !== item.sku.skuId.toString()) return sku;
 
             const detailsObject =
               sku.details instanceof Map
@@ -153,7 +168,7 @@ const createOrder = async (req, res) => {
         }
       })
     );
-
+``
     await CartModel.findByIdAndUpdate(cartId, {
       $set: {
         items: [],
@@ -207,6 +222,7 @@ const getAllOrders = async (req, res) => {
       dateRange,
       orderStatus,
       orderId,
+      orderFilters, 
     } = req.query;
 
     const page = parseInt(req.query.page) || 1;
@@ -221,6 +237,12 @@ const getAllOrders = async (req, res) => {
 
     if (orderId) {
       filter.orderId = orderId;
+    }
+
+    if (orderFilters === "product") {
+      filter.cartItems = { $exists: true, $not: { $size: 0 } };
+    } else if (orderFilters === "tiffin") {
+      filter.tiffinItems = { $exists: true, $not: { $size: 0 } };
     }
 
     if (startDate || endDate || specificDate || dateRange) {
@@ -282,8 +304,10 @@ const getAllOrders = async (req, res) => {
       }
     }
 
+    // Get total count
     const total = await OrderModel.countDocuments(filter);
 
+    // Fetch orders
     const orders = await OrderModel.find(filter)
       .sort({ Orderdate: -1 })
       .skip(skip)
@@ -328,9 +352,28 @@ const getOrdersByUser = async (req, res) => {
 
     const orders = await OrderModel.find(filter).sort({ Orderdate: -1 });
 
+    const ordersWithAddress = await Promise.all(
+      orders.map(async (order) => {
+        let addressData = null;
+        if (order.addressId) {
+          addressData = await AddressModel.findById(order.addressId);
+        }
+        return {
+          ...order.toObject(),
+          address: addressData,
+        };
+      })
+    );
+
     return res
       .status(200)
-      .json(new ApiResponse(200, orders, "User orders fetched successfully"));
+      .json(
+        new ApiResponse(
+          200,
+          ordersWithAddress,
+          "User orders fetched successfully"
+        )
+      );
   } catch (error) {
     console.error("Get user orders error:", error);
     return res.status(500).json(new ApiError(500, "Internal server error"));

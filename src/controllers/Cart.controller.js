@@ -292,7 +292,6 @@ const addToCart = async (req, res) => {
       });
     }
 
-    // ✅ Tiffin Cart Handling
     if (isTiffinCart) {
       if (
         !tiffinMenuId ||
@@ -316,7 +315,6 @@ const addToCart = async (req, res) => {
 
       const totalTiffinAmount = (singleTiffinTotal * tiffinQuantity).toFixed(2);
 
-      // Simplified version of customized items for comparison
       const simplifiedNewItems = customizedItems
         .map((item) => ({
           name: item.name?.trim(),
