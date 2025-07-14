@@ -21,7 +21,7 @@ const buildXmlRequest = (
   amount,
   pan,
   expdate,
-  cvv,
+  // cvv,
   cryptType = "7"
 ) => {
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -35,10 +35,6 @@ const buildXmlRequest = (
     <pan>${pan}</pan>
     <expdate>${expdate}</expdate>
     <crypt_type>${cryptType}</crypt_type>
-    <cvd_info>
-      <cvd_indicator>1</cvd_indicator>
-      <cvd_value>${cvv}</cvd_value>
-    </cvd_info>
   </purchase>
 </request>`;
 };
@@ -79,7 +75,7 @@ const CreatePayment = async (req, res) => {
       amount,
       cleanedCardNumber,
       expdate,
-      cvv
+      // cvv
     );
 
     const monerisResponse = await axios.post(MONERIS_API_URL, xmlPayload, {

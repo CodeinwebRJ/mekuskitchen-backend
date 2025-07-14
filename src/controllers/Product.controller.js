@@ -39,14 +39,18 @@ const getAllProducts = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const query = {};
-    if (search) {
-      const sanitizedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      query.$or = [
-        { name: { $regex: sanitizedSearch, $options: "i" } },
-        { description: { $regex: sanitizedSearch, $options: "i" } },
-        { brand: { $regex: sanitizedSearch, $options: "i" } },
-        { shortDescription: { $regex: sanitizedSearch, $options: "i" } },
-      ];
+    const andConditions = [];
+
+    if (search && typeof search === "string") {
+      const regex = new RegExp(search.trim(), "i");
+      andConditions.push({
+        $or: [
+          { name: regex },
+          { description: regex },
+          { brand: regex },
+          { shortDescription: regex },
+        ],
+      });
     }
 
     const sanitizeArray = (arr) =>
@@ -93,14 +97,20 @@ const getAllProducts = async (req, res) => {
 
       if (validRatings.length) {
         const minRating = Math.min(...validRatings);
-        query.avrageRating = { $gte: minRating };
+        query.averageRating = { $gte: minRating };
       }
     }
 
     if (variation === "product") {
-      query.$or = [{ sku: { $size: 0 } }, { sku: null }];
+      andConditions.push({
+        $or: [{ sku: { $size: 0 } }, { sku: null }],
+      });
     } else if (variation === "sku") {
       query["sku.0"] = { $exists: true };
+    }
+
+    if (andConditions.length > 0) {
+      query.$and = andConditions;
     }
 
     const sortStage = {};
@@ -112,7 +122,7 @@ const getAllProducts = async (req, res) => {
         sortStage.price = 1;
         break;
       case "sortbyaverageratings":
-        sortStage.avrageRating = -1;
+        sortStage.averageRating = -1;
         break;
       case "sortbylatest":
         sortStage.createdAt = -1;
@@ -131,18 +141,18 @@ const getAllProducts = async (req, res) => {
     const response = {
       success: true,
       total,
-      page,
-      limit,
+      page: parseInt(page),
+      limit: parseInt(limit),
       pages: Math.ceil(total / limit),
       data: products,
     };
 
-    res
+    return res
       .status(200)
       .json(new ApiResponse(200, response, "Fetched Data Successfully"));
   } catch (error) {
     console.error("Error in getAllProducts:", error);
-    res
+    return res
       .status(500)
       .json(new ApiError(500, "Server error while fetching products"));
   }
