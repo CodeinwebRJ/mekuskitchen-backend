@@ -222,7 +222,7 @@ const getAllOrders = async (req, res) => {
       dateRange,
       orderStatus,
       orderId,
-      orderFilters, 
+      orderFilters,
     } = req.query;
 
     const page = parseInt(req.query.page) || 1;
@@ -304,15 +304,22 @@ const getAllOrders = async (req, res) => {
       }
     }
 
-    // Get total count
     const total = await OrderModel.countDocuments(filter);
 
-    // Fetch orders
-    const orders = await OrderModel.find(filter)
+    const rawOrders = await OrderModel.find(filter)
       .sort({ Orderdate: -1 })
       .skip(skip)
       .limit(limit)
       .lean();
+
+    const addressIds = rawOrders.map((order) => order.addressId).filter(Boolean);
+    const addresses = await AddressModel.find({ _id: { $in: addressIds } }).lean();
+    const addressMap = new Map(addresses.map((addr) => [addr._id.toString(), addr]));
+
+    const orders = rawOrders.map((order) => ({
+      ...order,
+      address: addressMap.get(order.addressId?.toString()) || null,
+    }));
 
     return res.status(200).json(
       new ApiResponse(

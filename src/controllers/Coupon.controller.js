@@ -370,6 +370,7 @@ const CreateCoupons = async (req, res) => {
       ProductCategory,
       allProducts,
       isMultiple,
+      isTiffin,
     } = req.body;
 
     if (!code || !discountType || !discountValue) {
@@ -492,6 +493,7 @@ const CreateCoupons = async (req, res) => {
     }
 
     const parsedIsActive = isActive !== undefined ? Boolean(isActive) : true;
+    const parsedIsTiffin = isTiffin !== undefined ? Boolean(isTiffin) : true;
     const parsedIsMultiple =
       isMultiple !== undefined ? Boolean(isMultiple) : false;
     const parsedAllProducts =
@@ -523,6 +525,7 @@ const CreateCoupons = async (req, res) => {
       category: parsedCategory,
       subCategory: parsedSubCategory,
       ProductCategory: parsedProductCategory,
+      isTiffin: parsedIsTiffin,
     });
 
     await coupon.save();
@@ -559,6 +562,7 @@ const EditCoupons = async (req, res) => {
       category,
       subCategory,
       ProductCategory,
+      isTiffin,
     } = req.body;
 
     if (!couponId) {
@@ -698,6 +702,10 @@ const EditCoupons = async (req, res) => {
 
     if (isMultiple !== undefined) {
       updateData.isMultiple = Boolean(isMultiple);
+    }
+
+    if (isTiffin !== undefined) {
+      updateData.isTiffin = Boolean(isTiffin);
     }
 
     if (allProducts !== undefined) {
@@ -851,9 +859,140 @@ const RemoveCoupon = async (req, res) => {
 
 const ValidateTiffinCoupon = async (req, res) => {
   try {
-    
+    const { code, orderTotal, date, userId } = req.query;
+
+    if (!code || !orderTotal || !userId) {
+      return res
+        .status(400)
+        .json(
+          new ApiError(400, "Coupon code, order total, and userId are required")
+        );
+    }
+
+    const orderAmount = parseFloat(orderTotal);
+    if (isNaN(orderAmount) || orderAmount <= 0) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "Order total must be a positive number"));
+    }
+
+    let validationDate = new Date();
+    if (date) {
+      const datePattern = /^(\d{2})-(\d{2})-(\d{4})$/;
+      if (!datePattern.test(date)) {
+        return res
+          .status(400)
+          .json(new ApiError(400, "Invalid date format. Use DD-MM-YYYY"));
+      }
+      const [day, month, year] = date.split("-").map(Number);
+      validationDate = new Date(year, month - 1, day);
+      if (isNaN(validationDate.getTime())) {
+        return res.status(400).json(new ApiError(400, "Invalid date value"));
+      }
+    }
+
+    const trimmedCode = code.trim().toUpperCase();
+
+    const coupon = await CouponModel.findOne({
+      code: trimmedCode,
+      isActive: true,
+      isTiffin: true,
+      $or: [
+        { startAt: { $exists: false } },
+        { startAt: { $lte: validationDate } },
+      ],
+      $or: [
+        { expiresAt: { $exists: false } },
+        { expiresAt: { $gte: validationDate } },
+      ],
+    });
+
+    if (!coupon) {
+      return res
+        .status(404)
+        .json(
+          new ApiError(
+            404,
+            "Tiffin coupon not found, inactive, expired, or usage limit reached"
+          )
+        );
+    }
+
+    if (!coupon.isMultiple && coupon.usedBy.includes(userId)) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "You have already used this tiffin coupon"));
+    }
+
+    if (coupon.minOrderAmount && orderAmount < coupon.minOrderAmount) {
+      return res
+        .status(400)
+        .json(
+          new ApiError(
+            400,
+            `Order total must be at least ${coupon.minOrderAmount}`
+          )
+        );
+    }
+
+    let discount = 0;
+    if (coupon.discountType === "percentage") {
+      discount = (coupon.discountValue / 100) * orderAmount;
+    } else if (coupon.discountType === "fixed") {
+      discount = coupon.discountValue;
+    }
+
+    discount = Math.min(discount, orderAmount);
+    discount = Math.round(discount * 100) / 100;
+
+    const updateOps = {
+      $addToSet: { usedBy: userId },
+    };
+    if (coupon.usageLimit && coupon.usageLimit > 0) {
+      updateOps.$inc = { usedCount: 1 };
+    }
+
+    await CouponModel.updateOne({ _id: coupon._id }, updateOps);
+
+    const cart = await CartModel.findOne({ user: userId });
+    if (cart) {
+      cart.discount = discount;
+      cart.discountType = coupon.discountType;
+      cart.couponCode = coupon.code;
+      cart.discountValue = coupon.discountValue;
+      await cart.save();
+    }
+
+    let formattedExpiresAt = null;
+    if (coupon.expiresAt) {
+      formattedExpiresAt = new Date(coupon.expiresAt).toLocaleDateString(
+        "en-GB"
+      );
+    }
+
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          valid: true,
+          code: coupon.code,
+          discount,
+          discountType: coupon.discountType,
+          discountValue: coupon.discountValue,
+          minOrderAmount: coupon.minOrderAmount || 0,
+          expiresAt: formattedExpiresAt,
+          usageLimit: coupon.usageLimit || null,
+          usedCount:
+            coupon.usageLimit && coupon.usageLimit > 0
+              ? coupon.usedCount + 1
+              : null,
+        },
+        "Tiffin coupon validated successfully"
+      )
+    );
   } catch (error) {
-    console.log(error);
+    console.error("Tiffin coupon validation error:", error);
+    return res.status(500).json(new ApiError(500, "Internal Server Error"));
   }
 };
 

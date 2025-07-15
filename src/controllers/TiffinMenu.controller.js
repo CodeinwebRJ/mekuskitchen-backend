@@ -26,12 +26,22 @@ const getAllTiffinMenu = async (req, res) => {
     const { Active, day, search } = req.body;
     const filter = {};
 
-    if (Active !== undefined) filter.Active = Active;
-    if (day?.trim()) filter.day = day.trim();
+    if (Active !== undefined) {
+      filter.Active = Active;
+    }
+
+    if (day?.trim()) {
+      filter.day = day.trim();
+    }
 
     if (search?.trim()) {
       const regex = new RegExp(search.trim(), "i");
-      filter.$or = [{ description: regex }, { "items.name": regex }];
+      filter.$or = [
+        { name: regex },
+        { day: regex },
+        { description: regex },
+        { "items.name": regex },
+      ];
     }
 
     let tiffins = await TiffinMenuModel.find(filter).sort({ createdAt: -1 });
@@ -42,7 +52,12 @@ const getAllTiffinMenu = async (req, res) => {
 
     const tiffinIds = tiffins.map((t) => t._id);
     const ratings = await ReviewModel.aggregate([
-      { $match: { tiffinId: { $in: tiffinIds }, isTiffinReview: true } },
+      {
+        $match: {
+          tiffinId: { $in: tiffinIds },
+          isTiffinReview: true,
+        },
+      },
       {
         $group: {
           _id: "$tiffinId",

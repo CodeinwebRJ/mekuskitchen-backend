@@ -521,8 +521,16 @@ const addToCart = async (req, res) => {
 
 const updateCart = async (req, res) => {
   try {
-    const { user_id, product_id, skuId, tiffinMenuId, day, quantity, type } =
-      req.body;
+    const {
+      user_id,
+      product_id,
+      skuId,
+      tiffinMenuId,
+      day,
+      quantity,
+      type,
+      customizedItems,
+    } = req.body;
     const { provinceCode } = req.query;
 
     if (
@@ -577,9 +585,45 @@ const updateCart = async (req, res) => {
           .json(new ApiError(400, "Tiffin menu ID and day are required"));
       }
 
-      const tiffinIndex = cart.tiffins.findIndex(
-        (t) => t.tiffinMenuId === tiffinMenuId && t.day === day
-      );
+      if (!Array.isArray(customizedItems) || customizedItems.length === 0) {
+        return res
+          .status(400)
+          .json(
+            new ApiError(400, "Customized items are required for tiffin update")
+          );
+      }
+
+      const simplifiedNewItems = customizedItems
+        .map((item) => ({
+          name: item.name?.trim(),
+          quantity: parseInt(item.quantity),
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      const tiffinIndex = cart.tiffins.findIndex((t) => {
+        if (
+          t.tiffinMenuId !== tiffinMenuId ||
+          t.day !== day ||
+          !Array.isArray(t.customizedItems)
+        )
+          return false;
+
+        const simplifiedExisting = t.customizedItems
+          .map((item) => ({
+            name: item.name?.trim(),
+            quantity: parseInt(item.quantity),
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+        if (simplifiedExisting.length !== simplifiedNewItems.length)
+          return false;
+
+        return simplifiedExisting.every(
+          (item, i) =>
+            item.name === simplifiedNewItems[i].name &&
+            item.quantity === simplifiedNewItems[i].quantity
+        );
+      });
 
       if (tiffinIndex === -1) {
         return res
@@ -599,7 +643,9 @@ const updateCart = async (req, res) => {
           return sum + itemPrice * itemQty;
         }, 0);
 
-        tiffin.totalAmount = (basePrice * quantity).toFixed(2);
+        tiffin.totalAmount = parseFloat(
+          (basePrice * tiffin.quantity).toFixed(2)
+        );
       }
     }
 
@@ -729,24 +775,3 @@ module.exports = {
   getUserCart,
   updateCart,
 };
-
-// Add tiffin data
-
-// {
-//   "user_id": "6615abcd1234ef5678901234",
-//   "isTiffinCart": true,
-//   "tiffinMenuId": "60d5f483f88b2c001c8e4b1a",
-//   "customizedItems": [
-//     {
-//       "itemId": "67fdec791eae78c63cbbdbdf",
-//       "name": "Aloo Gobi",
-//       "price": "150.00",
-//       "quantity": 1
-//     }
-//   ],
-//   "specialInstructions": "No onions, please.",
-//   "orderDate": "2025-04-16",
-//   "day": "Tuesday",
-//   "quantity": 1,
-//   "price": "350.00"
-// }
