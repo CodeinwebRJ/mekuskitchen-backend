@@ -144,10 +144,6 @@ const UpdateProfile = async (req, res) => {
     const { id, email, name, phone, avatar, oldPassword, newPassword } =
       req.body;
 
-    if (!email) {
-      return res.status(400).json(new ApiError(400, "Email is required"));
-    }
-
     const admin = await AdminModel.findById(id);
     if (!admin) {
       return res.status(404).json(new ApiError(404, "Admin not found"));
