@@ -859,7 +859,7 @@ const RemoveCoupon = async (req, res) => {
 
 const ValidateTiffinCoupon = async (req, res) => {
   try {
-    const { code, orderTotal, date, userId } = req.query;
+    const { code, orderTotal, date, userId } = req.body;
 
     if (!code || !orderTotal || !userId) {
       return res
