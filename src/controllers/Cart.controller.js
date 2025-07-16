@@ -466,7 +466,7 @@ const addToCart = async (req, res) => {
           });
         }
       } else {
-        if (product.stock !== null && parsedQuantity > product.stock) {
+        if (product.manageInventory === true && product.stock === 0) {
           return res
             .status(400)
             .json(

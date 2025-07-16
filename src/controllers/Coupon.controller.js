@@ -297,7 +297,6 @@ const ValidateCoupon = async (req, res) => {
     discount = Math.min(discount, orderAmount);
     discount = Math.round(discount * 100) / 100;
 
-    // Build update object depending on usageLimit
     const updateOps = {
       $addToSet: { usedBy: userId },
     };
@@ -308,7 +307,6 @@ const ValidateCoupon = async (req, res) => {
 
     await CouponModel.updateOne({ _id: coupon._id }, updateOps);
 
-    // Update cart with discount details
     const cart = await CartModel.findOne({ user: userId });
     if (cart) {
       cart.discount = discount;
