@@ -762,13 +762,18 @@ const updateCart = async (req, res) => {
   }
 };
 
-const bulkUploadCartItems = async (req, res) => {
+const bulkUploadProductCart = async (req, res) => {
   try {
     const { user_id, items } = req.body;
     const provinceCode = req.query.provinceCode || null;
 
-    if (!user_id || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json(new ApiError(400, "Invalid request payload"));
+    if (!user_id) {
+      return res.status(400).json(new ApiError(400, "User ID is required"));
+    }
+    if (!Array.isArray(items) || items.length === 0) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "Items array is required and cannot be empty"));
     }
 
     let cart = await CartModel.findOne({ user: user_id });
@@ -782,187 +787,423 @@ const bulkUploadCartItems = async (req, res) => {
     }
 
     for (const item of items) {
-      const {
-        type,
-        quantity,
-        price,
-        product_id,
-        skuId,
-        combination = {},
-        tiffinMenuId,
-        customizedItems = [],
-        specialInstructions,
-        orderDate,
-        day,
-        deliveryDate,
-      } = item;
+      const { product_id, quantity, price, skuId, combination } = item;
 
-      if (type === "product") {
-        if (!product_id || !quantity || !price) continue;
-
-        const parsedQuantity = parseInt(quantity);
-        const parsedPrice = parseFloat(price);
-
-        const product = await ProductModel.findById(product_id);
-        if (!product) continue;
-
-        const isUsingSku = skuId && mongoose.isValidObjectId(skuId);
-        const cleanCombination = { ...combination };
-        let skuData = null;
-
-        if (isUsingSku) {
-          const skuArray = Array.isArray(product.sku) ? product.sku : [];
-          const sku = skuArray.find((s) => s._id.toString() === skuId);
-          if (!sku) continue;
-
-          const skuDetails = sku.details || {};
-          const combinations = skuDetails.combinations || [];
-          const skuImages =
-            skuDetails.SKUImages || product.images?.map((img) => img.url) || [];
-
-          delete cleanCombination.Price;
-          delete cleanCombination.Stock;
-
-          const matchedCombination = combinations.find((comb) =>
-            Object.keys(cleanCombination).every(
-              (key) => comb[key] == cleanCombination[key]
+      if (!product_id || !quantity || !price) {
+        return res
+          .status(400)
+          .json(
+            new ApiError(
+              400,
+              `Missing required fields for product ${product_id || "unknown"}`
             )
           );
+      }
 
-          if (
-            matchedCombination &&
-            matchedCombination.Stock !== undefined &&
-            parsedQuantity > matchedCombination.Stock
-          )
-            continue;
-
-          if (
-            matchedCombination &&
-            matchedCombination.Price !== undefined &&
-            parsedPrice !== matchedCombination.Price
-          )
-            continue;
-
-          skuData = {
-            skuId: sku._id,
-            name: skuDetails.Name || product.name,
-            skuName: skuDetails.SKUname || product.SKUName,
-            images: skuImages,
-          };
-        }
-
-        const existingIndex = cart.items.findIndex(
-          (i) =>
-            i.product_id.toString() === product_id &&
-            (isUsingSku ? i.sku?.skuId?.toString() === skuId : !i.sku?.skuId) &&
-            JSON.stringify(i.combination || {}) ===
-              JSON.stringify(cleanCombination)
-        );
-
-        if (existingIndex > -1) {
-          cart.items[existingIndex].quantity += parsedQuantity;
-        } else {
-          cart.items.push({
-            product_id,
-            quantity: parsedQuantity,
-            price: parsedPrice,
-            combination: cleanCombination,
-            sku: skuData,
-          });
-        }
-      } else if (type === "tiffin") {
-        if (
-          !tiffinMenuId ||
-          !Array.isArray(customizedItems) ||
-          customizedItems.length === 0 ||
-          !orderDate ||
-          !day
-        )
-          continue;
-
-        const tiffinQuantity = parseInt(quantity || 1);
-        const singleTiffinTotal = customizedItems.reduce((sum, ci) => {
-          return sum + parseFloat(ci.price || 0) * parseInt(ci.quantity || 1);
-        }, 0);
-        const totalTiffinAmount = (singleTiffinTotal * tiffinQuantity).toFixed(
-          2
-        );
-
-        const simplifiedNewItems = customizedItems
-          .map((ci) => ({
-            name: ci.name?.trim(),
-            quantity: parseInt(ci.quantity),
-          }))
-          .sort((a, b) => a.name.localeCompare(b.name));
-
-        const matchingIndex = cart.tiffins.findIndex((t) => {
-          const sameMenu = t.tiffinMenuId === tiffinMenuId;
-          const sameDay = t.day === day;
-          const sameOrderDate = t.orderDate === orderDate;
-          const sameDeliveryDate =
-            (t.deliveryDate || "") === (deliveryDate || "");
-
-          if (!sameMenu || !sameDay || !sameOrderDate || !sameDeliveryDate)
-            return false;
-
-          const simplifiedExisting = t.customizedItems
-            .map((ci) => ({
-              name: ci.name?.trim(),
-              quantity: parseInt(ci.quantity),
-            }))
-            .sort((a, b) => a.name.localeCompare(b.name));
-
-          if (simplifiedExisting.length !== simplifiedNewItems.length)
-            return false;
-
-          return simplifiedExisting.every(
-            (ci, i) =>
-              ci.name === simplifiedNewItems[i].name &&
-              ci.quantity === simplifiedNewItems[i].quantity
+      const parsedQuantity = parseInt(quantity);
+      const parsedPrice = parseFloat(price);
+      if (isNaN(parsedQuantity) || parsedQuantity < 1) {
+        return res
+          .status(400)
+          .json(
+            new ApiError(
+              400,
+              `Invalid quantity for product ${product_id}: ${quantity}`
+            )
           );
-        });
+      }
+      if (isNaN(parsedPrice) || parsedPrice < 0) {
+        return res
+          .status(400)
+          .json(
+            new ApiError(
+              400,
+              `Invalid price for product ${product_id}: ${price}`
+            )
+          );
+      }
 
-        if (matchingIndex !== -1) {
-          const existing = cart.tiffins[matchingIndex];
-          existing.quantity += tiffinQuantity;
-          existing.totalAmount = (
-            singleTiffinTotal * existing.quantity
-          ).toFixed(2);
-        } else {
-          cart.tiffins.push({
-            tiffinMenuId,
-            customizedItems,
-            specialInstructions: specialInstructions || "",
-            orderDate,
-            day,
-            deliveryDate: deliveryDate || "",
-            quantity: tiffinQuantity,
-            totalAmount: totalTiffinAmount,
-          });
+      const product = await ProductModel.findById(product_id);
+      if (!product) {
+        return res
+          .status(404)
+          .json(new ApiError(404, `Product not found: ${product_id}`));
+      }
+
+      let cleanCombination = {};
+      let skuDetails = null;
+      let skuImages = product.images.map((img) => img.url);
+
+      const isUsingSku =
+        skuId && skuId !== "null" && skuId !== "undefined" && skuId !== "";
+
+      if (isUsingSku) {
+        if (!mongoose.isValidObjectId(skuId)) {
+          return res
+            .status(400)
+            .json(new ApiError(400, `Invalid SKU ID: ${skuId}`));
         }
+
+        const selectedSku = product.sku.find((s) => s._id.toString() === skuId);
+        if (!selectedSku) {
+          return res
+            .status(404)
+            .json(new ApiError(404, `SKU not found: ${skuId}`));
+        }
+
+        skuDetails = selectedSku.details || new Map();
+        const combinations = skuDetails.get("combinations") || [];
+        skuImages = skuDetails.get("SKUImages") || skuImages;
+
+        cleanCombination = { ...combination };
+        delete cleanCombination.Price;
+        delete cleanCombination.Stock;
+
+        const matchedCombination = combinations.find((comb) =>
+          Object.keys(cleanCombination).every(
+            (key) => comb[key] == cleanCombination[key]
+          )
+        );
+
+        if (!matchedCombination) {
+          return res
+            .status(400)
+            .json(
+              new ApiError(
+                400,
+                `Invalid SKU combination for SKU ${skuId}: ${JSON.stringify(
+                  cleanCombination
+                )}`
+              )
+            );
+        }
+
+        if (
+          matchedCombination.Stock !== undefined &&
+          parsedQuantity > matchedCombination.Stock
+        ) {
+          return res
+            .status(400)
+            .json(
+              new ApiError(
+                400,
+                `Quantity exceeds SKU stock for ${product_id}, SKU ${skuId}`
+              )
+            );
+        }
+
+        if (
+          matchedCombination.Price !== undefined &&
+          parsedPrice !== matchedCombination.Price
+        ) {
+          return res
+            .status(400)
+            .json(
+              new ApiError(
+                400,
+                `Price mismatch for ${product_id}, SKU ${skuId}: expected ${matchedCombination.Price}`
+              )
+            );
+        }
+      } else {
+        if (product.stock !== null && parsedQuantity > product.stock) {
+          return res
+            .status(400)
+            .json(
+              new ApiError(
+                400,
+                `Quantity exceeds available stock for ${product_id}`
+              )
+            );
+        }
+      }
+
+      const itemIndex = cart.items.findIndex((cartItem) => {
+        const isSameProduct = cartItem.product_id.toString() === product_id;
+        const isSameSku = isUsingSku
+          ? cartItem.sku?.skuId?.toString() === skuId
+          : !cartItem.sku || !cartItem.sku.skuId;
+        const isSameCombination =
+          JSON.stringify(cartItem.combination) ===
+          JSON.stringify(cleanCombination);
+        return isSameProduct && isSameSku && isSameCombination;
+      });
+
+      if (itemIndex > -1) {
+        cart.items[itemIndex].quantity += parsedQuantity;
+      } else {
+        cart.items.push({
+          product_id,
+          quantity: parsedQuantity,
+          price: parsedPrice,
+          combination: cleanCombination,
+          sku: isUsingSku
+            ? {
+                skuId,
+                name: skuDetails.get("Name") || product.name,
+                skuName: skuDetails.get("SKUname") || product.SKUName,
+                images: skuImages,
+              }
+            : null,
+        });
       }
     }
 
-    // === Total calculations ===
     const productTotal = cart.items.reduce(
       (sum, item) => sum + (item.price || 0) * (item.quantity || 0),
       0
     );
+    cart.totalAmount = productTotal;
+    await cart.save();
+    const finalCart = await formatUserCart(cart, provinceCode);
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          finalCart,
+          "Cart updated successfully with bulk upload"
+        )
+      );
+  } catch (error) {
+    console.error("Error in bulkUploadCart:", error);
+    return res
+      .status(500)
+      .json(new ApiError(500, "Internal Server Error", [error.message]));
+  }
+};
+
+const bulkUploadTiffinCart = async (req, res) => {
+  try {
+    const { user_id, tiffins } = req.body;
+    const provinceCode = req.query.provinceCode || null;
+
+    if (!user_id) {
+      return res.status(400).json(new ApiError(400, "User ID is required"));
+    }
+    if (!Array.isArray(tiffins) || tiffins.length === 0) {
+      return res
+        .status(400)
+        .json(
+          new ApiError(400, "Tiffins array is required and cannot be empty")
+        );
+    }
+
+    let cart = await CartModel.findOne({ user: user_id });
+    if (!cart) {
+      cart = new CartModel({
+        user: user_id,
+        items: [],
+        tiffins: [],
+        totalAmount: 0,
+      });
+    }
+
+    for (const tiffin of tiffins) {
+      const {
+        tiffinMenuId,
+        day,
+        deliveryDate,
+        orderDate,
+        customizedItems,
+        quantity,
+        price,
+        specialInstructions,
+      } = tiffin;
+
+      if (
+        !tiffinMenuId ||
+        !day ||
+        !orderDate ||
+        !Array.isArray(customizedItems) ||
+        customizedItems.length === 0
+      ) {
+        return res
+          .status(400)
+          .json(
+            new ApiError(
+              400,
+              `Missing required fields for tiffin ${tiffinMenuId || "unknown"}`
+            )
+          );
+      }
+
+      const parsedQuantity = parseInt(quantity);
+      const parsedPrice = parseFloat(price);
+      if (isNaN(parsedQuantity) || parsedQuantity < 1) {
+        return res
+          .status(400)
+          .json(
+            new ApiError(
+              400,
+              `Invalid quantity for tiffin ${tiffinMenuId}: ${quantity}`
+            )
+          );
+      }
+      if (isNaN(parsedPrice) || parsedPrice < 0) {
+        return res
+          .status(400)
+          .json(
+            new ApiError(
+              400,
+              `Invalid price for tiffin ${tiffinMenuId}: ${price}`
+            )
+          );
+      }
+
+      for (const item of customizedItems) {
+        const { name, price: itemPrice, quantity: itemQuantity } = item;
+        if (!name || !itemPrice || !itemQuantity) {
+          return res
+            .status(400)
+            .json(
+              new ApiError(
+                400,
+                `Missing required fields in customizedItems for tiffin ${tiffinMenuId}`
+              )
+            );
+        }
+        const parsedItemPrice = parseFloat(itemPrice);
+        const parsedItemQuantity = parseInt(itemQuantity);
+        if (isNaN(parsedItemPrice) || parsedItemPrice < 0) {
+          return res
+            .status(400)
+            .json(
+              new ApiError(
+                400,
+                `Invalid price in customizedItems for tiffin ${tiffinMenuId}: ${itemPrice}`
+              )
+            );
+        }
+        if (isNaN(parsedItemQuantity) || parsedItemQuantity < 1) {
+          return res
+            .status(400)
+            .json(
+              new ApiError(
+                400,
+                `Invalid quantity in customizedItems for tiffin ${tiffinMenuId}: ${itemQuantity}`
+              )
+            );
+        }
+      }
+
+      const tiffinMenu = await TiffinModel.findById(tiffinMenuId);
+      if (!tiffinMenu) {
+        return res
+          .status(404)
+          .json(new ApiError(404, `Tiffin menu not found: ${tiffinMenuId}`));
+      }
+
+      const singleTiffinTotal = customizedItems.reduce((sum, item) => {
+        console.log(item.price, item.quantity);
+        const itemPrice = parseFloat(item.price || 0);
+        const itemQty = parseInt(item.quantity || 1);
+        return sum + itemPrice * itemQty;
+      }, 0);
+
+      const totalTiffinAmount = (singleTiffinTotal * parsedQuantity).toFixed(2);
+      if (parseFloat(totalTiffinAmount) !== parsedPrice) {
+        return res
+          .status(400)
+          .json(
+            new ApiError(
+              400,
+              `Price mismatch for tiffin ${tiffinMenuId}: expected ${totalTiffinAmount}, received ${parsedPrice}`
+            )
+          );
+      }
+
+      const simplifiedNewItems = customizedItems
+        .map((item) => ({
+          name: item.name?.trim(),
+          quantity: parseInt(item.quantity),
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      const matchingIndex = cart.tiffins.findIndex((t) => {
+        if (
+          t.tiffinMenuId !== tiffinMenuId ||
+          t.day !== day ||
+          t.orderDate !== orderDate ||
+          t.deliveryDate !== (deliveryDate || "")
+        ) {
+          return false;
+        }
+
+        const simplifiedExisting = t.customizedItems
+          .map((item) => ({
+            name: item.name?.trim(),
+            quantity: parseInt(item.quantity),
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+        if (simplifiedExisting.length !== simplifiedNewItems.length) {
+          return false;
+        }
+
+        return simplifiedExisting.every((item, i) => {
+          return (
+            item.name === simplifiedNewItems[i].name &&
+            item.quantity === simplifiedNewItems[i].quantity
+          );
+        });
+      });
+
+      const formattedCustomizedItems = customizedItems.map((item) => ({
+        name: item.name,
+        price: item.price,
+        quantity: parseInt(item.quantity),
+        weight: item.weight || "",
+        weightUnit: item.weightUnit || "",
+        description: item.description || "",
+        included: true,
+      }));
+
+      if (matchingIndex !== -1) {
+        cart.tiffins[matchingIndex].quantity += parsedQuantity;
+        cart.tiffins[matchingIndex].totalAmount = (
+          singleTiffinTotal * cart.tiffins[matchingIndex].quantity
+        ).toFixed(2);
+      } else {
+        // Add new tiffin
+        cart.tiffins.push({
+          tiffinMenuId,
+          customizedItems: formattedCustomizedItems,
+          specialInstructions: specialInstructions || "",
+          orderDate,
+          day,
+          deliveryDate: deliveryDate || "",
+          quantity: parsedQuantity,
+          totalAmount: totalTiffinAmount,
+        });
+      }
+    }
+
+    // Calculate total amount
     const tiffinTotal = cart.tiffins.reduce(
       (sum, tiffin) => sum + parseFloat(tiffin.totalAmount || 0),
       0
     );
-    cart.totalAmount = parseFloat((productTotal + tiffinTotal).toFixed(2));
-
+    const productTotal = cart.items.reduce(
+      (sum, item) => sum + (item.price || 0) * (item.quantity || 0),
+      0
+    );
+    cart.totalAmount = (productTotal + tiffinTotal).toFixed(2);
     await cart.save();
-
-    const formattedCart = await formatUserCart(cart, provinceCode);
+    const finalCart = await formatUserCart(cart, provinceCode);
 
     return res
       .status(200)
-      .json(new ApiResponse(200, formattedCart, "Cart bulk upload successful"));
+      .json(
+        new ApiResponse(
+          200,
+          finalCart,
+          "Tiffin cart updated successfully with bulk upload"
+        )
+      );
   } catch (error) {
-    console.error("Error in bulkUploadCart:", error);
+    console.error("Error in bulkUploadTiffinCart:", error);
     return res
       .status(500)
       .json(new ApiError(500, "Internal Server Error", [error.message]));
@@ -973,5 +1214,6 @@ module.exports = {
   addToCart,
   getUserCart,
   updateCart,
-  bulkUploadCartItems,
+  bulkUploadProductCart,
+  bulkUploadTiffinCart,
 };

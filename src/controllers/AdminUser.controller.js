@@ -159,7 +159,7 @@ const UpdateProfile = async (req, res) => {
       if (!isMatch) {
         return res
           .status(401)
-          .json(new ApiError(401, "Old password is incorrect"));
+          .json(new ApiError(401, "Old password is incorrect Please enter correct password"));
       }
 
       const hashedPassword = await bcrypt.hash(newPassword, 10);

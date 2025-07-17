@@ -3,13 +3,15 @@ const {
   getUserCart,
   addToCart,
   updateCart,
-  bulkUploadCartItems,
+  bulkUploadTiffinCart,
+  bulkUploadProductCart,
 } = require("../controllers/Cart.controller");
 const CartRoute = express.Router();
 
 CartRoute.get("/:userId", getUserCart);
 CartRoute.post("/create", addToCart);
 CartRoute.put("/update", updateCart);
-CartRoute.post("/bulk", bulkUploadCartItems);
+CartRoute.post("/product/bulk", bulkUploadProductCart);
+CartRoute.post("/tiffin/bulk", bulkUploadTiffinCart);
 
 module.exports = CartRoute;
