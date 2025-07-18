@@ -54,7 +54,9 @@ const createOrder = async (req, res) => {
       (cart.items || []).map(async (item) => {
         const product = await ProductModel.findById(item.product_id);
         if (!product) {
-          throw new Error(`Product not found for ID: ${item.product_id}`);
+          return res
+            .status(404)
+            .json(new ApiError(`Product not found for ID: ${item.product_id}`));
         }
 
         return {
@@ -68,9 +70,13 @@ const createOrder = async (req, res) => {
       (cart.tiffins || []).map(async (tiffin) => {
         const tiffinMenu = await TiffinMenuModel.findById(tiffin.tiffinMenuId);
         if (!tiffinMenu) {
-          throw new Error(
-            `Tiffin menu not found for ID: ${tiffin.tiffinMenuId}`
-          );
+          return res
+            .status(404)
+            .json(
+              new ApiError(
+                `Tiffin menu not found for ID: ${tiffin.tiffinMenuId}`
+              )
+            );
         }
 
         return {
@@ -168,7 +174,7 @@ const createOrder = async (req, res) => {
         }
       })
     );
-``
+    ``;
     await CartModel.findByIdAndUpdate(cartId, {
       $set: {
         items: [],
@@ -312,9 +318,15 @@ const getAllOrders = async (req, res) => {
       .limit(limit)
       .lean();
 
-    const addressIds = rawOrders.map((order) => order.addressId).filter(Boolean);
-    const addresses = await AddressModel.find({ _id: { $in: addressIds } }).lean();
-    const addressMap = new Map(addresses.map((addr) => [addr._id.toString(), addr]));
+    const addressIds = rawOrders
+      .map((order) => order.addressId)
+      .filter(Boolean);
+    const addresses = await AddressModel.find({
+      _id: { $in: addressIds },
+    }).lean();
+    const addressMap = new Map(
+      addresses.map((addr) => [addr._id.toString(), addr])
+    );
 
     const orders = rawOrders.map((order) => ({
       ...order,
@@ -480,6 +492,76 @@ const cancelOrder = async (req, res) => {
   }
 };
 
+const getAllTiffinOrders = async (req, res) => {
+  try {
+    const { date, orderId, page = 1, limit = 10 } = req.query;
+    const skip = (page - 1) * limit;
+
+    let filter = {
+      tiffinItems: { $exists: true, $not: { $size: 0 } },
+    };
+
+    if (orderId) {
+      const parsedOrderId = Number(orderId);
+      if (!isNaN(parsedOrderId)) {
+        filter.orderId = parsedOrderId;
+      }
+    }
+
+    if (date) {
+      const targetDate = new Date(date).toDateString();
+
+      filter["tiffinItems.deliveryDate"] = {
+        $regex: `^${targetDate}`,
+        $options: "i",
+      };
+    }
+
+    const total = await OrderModel.countDocuments(filter);
+
+    const rawOrders = await OrderModel.find(filter)
+      .sort({ Orderdate: -1 })
+      .skip(Number(skip))
+      .limit(Number(limit))
+      .lean();
+
+    const addressIds = rawOrders
+      .map((order) => order.addressId)
+      .filter(Boolean);
+
+    const addresses = await AddressModel.find({
+      _id: { $in: addressIds },
+    }).lean();
+
+    const addressMap = new Map(
+      addresses.map((addr) => [addr._id.toString(), addr])
+    );
+
+    const orders = rawOrders.map((order) => ({
+      ...order,
+      address: addressMap.get(order.addressId?.toString()) || null,
+    }));
+
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          success: true,
+          total,
+          page: String(page),
+          limit: String(limit),
+          pages: Math.ceil(total / limit),
+          orders,
+        },
+        "Tiffin orders fetched successfully"
+      )
+    );
+  } catch (error) {
+    console.error("Get all tiffin orders error:", error);
+    return res.status(500).json(new ApiError(500, "Internal server error"));
+  }
+};
+
 module.exports = {
   createOrder,
   getOrderById,
@@ -487,4 +569,5 @@ module.exports = {
   getOrdersByUser,
   updateOrderStatus,
   cancelOrder,
+  getAllTiffinOrders,
 };

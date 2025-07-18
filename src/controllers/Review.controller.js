@@ -39,11 +39,6 @@ const addReviews = async (req, res) => {
     if (!rating) {
       return res.status(400).json(new ApiError(400, "Rating is required"));
     }
-    if (rating < 1 || rating > 5) {
-      return res
-        .status(400)
-        .json(new ApiError(400, "Rating must be between 1 and 5"));
-    }
 
     const review = await ReviewModel.create({
       product_id,
@@ -145,10 +140,10 @@ const addTiffinReview = async (req, res) => {
       return res.status(400).json(new ApiError(400, "Tiffin ID is required"));
     }
 
-    if (!rating || rating < 1 || rating > 5) {
+    if (!rating) {
       return res
         .status(400)
-        .json(new ApiError(400, "Rating must be between 1 and 5"));
+        .json(new ApiError(400, "Rating is required"));
     }
 
     const tiffin = await TiffinMenuModel.findById(product_id);

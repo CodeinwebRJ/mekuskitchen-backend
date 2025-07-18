@@ -385,16 +385,21 @@ const CreateCoupons = async (req, res) => {
     const validateStringArray = (arr, fieldName) => {
       if (arr !== undefined) {
         if (!Array.isArray(arr)) {
-          throw new ApiError(400, `${fieldName} must be an array of strings`);
+          return res
+            .status(400)
+            .json(
+              new ApiError(400, `${fieldName} must be an array of strings`)
+            );
         }
         const isValid = arr.every(
           (item) => typeof item === "string" && item.trim() !== ""
         );
         if (!isValid) {
-          throw new ApiError(
-            400,
-            `Each ${fieldName} must be a non-empty string`
-          );
+          return res
+            .status(400)
+            .json(
+              new ApiError(400, `Each ${fieldName} must be a non-empty string`)
+            );
         }
         return arr.map((item) => item.trim());
       }

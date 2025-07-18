@@ -9,7 +9,9 @@ const safeParseJSON = (data, fieldName) => {
   try {
     return typeof data === "string" ? JSON.parse(data) : data;
   } catch {
-    throw new ApiError(400, `Invalid JSON for ${fieldName}`);
+    return res
+      .status(400)
+      .json(new ApiError(400, `Invalid JSON for ${fieldName}`));
   }
 };
 

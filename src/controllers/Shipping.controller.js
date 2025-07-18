@@ -25,7 +25,9 @@ const CreateShipment = async (req, res) => {
     const convertToKgs = (weight, unit) => {
       const w = parseFloat(weight);
       if (isNaN(w)) {
-        throw new Error(`Invalid weight value: ${weight}`);
+        return res
+          .status(400)
+          .json(new ApiError(`Invalid weight value: ${weight}`));
       }
       switch ((unit || "kgs").toLowerCase()) {
         case "g":
@@ -48,7 +50,11 @@ const CreateShipment = async (req, res) => {
     const flattenedPackages = packages.flatMap((pkg) => {
       const quantity = parseInt(pkg.quantity, 10) || 1;
       if (isNaN(quantity) || quantity < 1) {
-        throw new Error(`Invalid quantity for package: ${JSON.stringify(pkg)}`);
+        return res
+          .status(400)
+          .json(
+            new ApiError(`Invalid quantity for package: ${JSON.stringify(pkg)}`)
+          );
       }
       const convertedWeight = convertToKgs(pkg.weight, pkg.unit);
       return Array.from({ length: quantity }).map(() => ({

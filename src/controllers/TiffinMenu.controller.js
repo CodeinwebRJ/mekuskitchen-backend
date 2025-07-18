@@ -17,7 +17,9 @@ const tryParseJson = (input, fieldName) => {
   try {
     return typeof input === "string" ? JSON.parse(input) : input;
   } catch {
-    throw new ApiError(400, `Invalid ${fieldName} JSON format`);
+    return res
+      .status(400)
+      .json(new ApiError(400, `Invalid ${fieldName} JSON format`));
   }
 };
 
@@ -114,13 +116,22 @@ const createTiffinMenu = async (req, res) => {
       aboutItem,
     } = req.body;
 
-    if (!day || !items) throw new ApiError(400, "Day and items are required");
+    if (!name)
+      return res.status(400).json(new ApiError(400, "name are required"));
+    if (!day || !items)
+      return res
+        .status(400)
+        .json(new ApiError(400, "Day and items are required"));
     if (!validDays.includes(day))
-      throw new ApiError(400, `Invalid day. Use: ${validDays.join(", ")}`);
+      return res
+        .status(400)
+        .json(new ApiError(400, `Invalid day. Use: ${validDays.join(", ")}`));
 
     items = tryParseJson(items, "items");
     if (!Array.isArray(items) || items.length === 0) {
-      throw new ApiError(400, "Items must be a non-empty array");
+      return res
+        .status(400)
+        .json(new ApiError(400, "Items must be a non-empty array"));
     }
 
     image_url = tryParseJson(image_url || [], "image_url");
@@ -163,7 +174,8 @@ const editTiffinMenu = async (req, res) => {
   try {
     const { id } = req.params;
     const tiffin = await TiffinMenuModel.findById(id);
-    if (!tiffin) throw new ApiError(404, "Tiffin menu not found");
+    if (!tiffin)
+      return res.status(404).json(new ApiError(404, "Tiffin menu not found"));
 
     let {
       name,
@@ -244,7 +256,8 @@ const deleteTiffinMenu = async (req, res) => {
   try {
     const { id } = req.params;
     const deleted = await TiffinMenuModel.findByIdAndDelete(id);
-    if (!deleted) throw new ApiError(404, "Tiffin menu not found");
+    if (!deleted)
+      return res.status(404).json(new ApiError(404, "Tiffin menu not found"));
 
     return res
       .status(200)
@@ -260,10 +273,12 @@ const deleteTiffinMenu = async (req, res) => {
 const getTiffinById = async (req, res) => {
   try {
     const { id } = req.params;
-    if (!id) throw new ApiError(400, "Tiffin ID is required");
+    if (!id)
+      return res.status(400).json(new ApiError(400, "Tiffin ID is required"));
 
     const tiffin = await TiffinMenuModel.findById(id);
-    if (!tiffin) throw new ApiError(404, "Tiffin not found");
+    if (!tiffin)
+      return res.status(404).json(new ApiError(404, "Tiffin not found"));
 
     return res
       .status(200)
