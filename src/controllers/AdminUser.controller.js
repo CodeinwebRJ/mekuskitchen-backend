@@ -129,10 +129,9 @@ const ForgotPassword = async (req, res) => {
 
     await admin.save();
 
-    return res.status(200).json({
-      success: true,
-      message: "Password has been reset successfully",
-    });
+    return res
+      .status(200)
+      .json(new ApiResponse(200, null, "Password reset successfully"));
   } catch (error) {
     console.error("ForgotPassword Error:", error);
     return res.status(500).json(new ApiError(500, "Internal Server Error"));
@@ -159,7 +158,12 @@ const UpdateProfile = async (req, res) => {
       if (!isMatch) {
         return res
           .status(401)
-          .json(new ApiError(401, "Old password is incorrect Please enter correct password"));
+          .json(
+            new ApiError(
+              401,
+              "Old password is incorrect Please enter correct password"
+            )
+          );
       }
 
       const hashedPassword = await bcrypt.hash(newPassword, 10);

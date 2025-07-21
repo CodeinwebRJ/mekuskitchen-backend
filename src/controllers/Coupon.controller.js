@@ -856,7 +856,7 @@ const RemoveCoupon = async (req, res) => {
       .json(new ApiResponse(200, null, "Coupon removed successfully"));
   } catch (error) {
     console.error("Error removing coupon:", error);
-    return res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json(new ApiError(500, "Internal Server Error"));
   }
 };
 

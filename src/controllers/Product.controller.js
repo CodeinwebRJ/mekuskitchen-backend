@@ -192,7 +192,9 @@ const CreateProduct = async (req, res) => {
       aboutItem,
     } = req.body;
 
-    const existingName = await ProductModel.findOne({ name: name.trim() });
+    const existingName = await ProductModel.findOne({
+      name: { $regex: `^${name.trim()}$`, $options: "i" },
+    });
     if (existingName) {
       return res
         .status(400)

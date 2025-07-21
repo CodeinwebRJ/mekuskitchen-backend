@@ -318,7 +318,9 @@ const SuggestAddress = async (req, res) => {
     const { search } = req.query;
 
     if (!search) {
-      return res.status(400).json({ error: "Missing 'search' parameter" });
+      return res
+        .status(400)
+        .json(new ApiError(400, "Missing 'search' parameter"));
     }
 
     const response = await axios.get(
@@ -338,7 +340,7 @@ const SuggestAddress = async (req, res) => {
     console.error("Canada Post SuggestAddress Error:", error.message);
     return res
       .status(500)
-      .json({ error: "Failed to fetch address suggestions" });
+      .json(new ApiError(500, "Failed to fetch address suggestions"));
   }
 };
 
@@ -347,7 +349,7 @@ const RetrieveAddressDetails = async (req, res) => {
     const { id } = req.query;
 
     if (!id) {
-      return res.status(400).json({ error: "Missing 'id' parameter" });
+      return res.status(400).json(new ApiError(400, "Missing 'id' parameter"));
     }
 
     const response = await axios.get(
@@ -365,7 +367,7 @@ const RetrieveAddressDetails = async (req, res) => {
     console.error("Canada Post RetrieveAddressDetails Error:", error.message);
     return res
       .status(500)
-      .json({ error: "Failed to fetch full address details" });
+      .json(new ApiError(500, "Failed to fetch address details"));
   }
 };
 

@@ -173,10 +173,7 @@ const CancelShipping = async (req, res) => {
       .json(new ApiResponse(200, shipment, "Shipment canceled successfully"));
   } catch (error) {
     console.error(error.response?.data || error.message);
-    res.status(500).json({
-      error: "Failed to cancel shipment",
-      details: error.response?.data || error.message,
-    });
+    res.status(500).json(new ApiError(500, "Failed to cancel shipment"));
   }
 };
 

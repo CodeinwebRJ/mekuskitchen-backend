@@ -1210,10 +1210,72 @@ const bulkUploadTiffinCart = async (req, res) => {
   }
 };
 
+const UpdateTiffinItem = async (req, res) => {
+  try {
+    const { user_id, tiffinMenuId, day, customizedItems } = req.body;
+
+    if (!user_id || !tiffinMenuId || !day || !Array.isArray(customizedItems)) {
+      return res.status(400).json(new ApiError(400, "Missing required fields"));
+    }
+
+    const cart = await CartModel.findOne({ user: user_id });
+    if (!cart) {
+      return res.status(404).json(new ApiError(404, "Cart not found"));
+    }
+
+    const tiffinIndex = cart.tiffins.findIndex(
+      (t) => t.tiffinMenuId === tiffinMenuId && t.day === day
+    );
+
+    if (tiffinIndex === -1) {
+      return res
+        .status(404)
+        .json(new ApiError(404, "Tiffin not found in cart"));
+    }
+
+    const tiffin = cart.tiffins[tiffinIndex];
+
+    tiffin.customizedItems = tiffin.customizedItems.map((item) => {
+      const match = customizedItems.find((ci) => ci.name === item.name);
+      if (match) {
+        return {
+          ...item.toObject(),
+          quantity: parseInt(match.quantity) || 1,
+        };
+      }
+      return item;
+    });
+
+    const basePrice = tiffin.customizedItems.reduce((sum, item) => {
+      const price = parseFloat(item.price || 0);
+      const qty = parseFloat(item.quantity || 1);
+      return sum + price * qty;
+    }, 0);
+
+    tiffin.totalAmount = parseFloat((basePrice * tiffin.quantity).toFixed(2));
+
+    await cart.save();
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          tiffin,
+          "Tiffin item quantities updated successfully"
+        )
+      );
+  } catch (error) {
+    console.error("UpdateTiffinItem Error:", error);
+    return res.status(500).json(new ApiError(500, "Internal Server Error"));
+  }
+};
+
 module.exports = {
   addToCart,
   getUserCart,
   updateCart,
   bulkUploadProductCart,
   bulkUploadTiffinCart,
+  UpdateTiffinItem,
 };
