@@ -133,7 +133,6 @@ const CreateShipment = async (req, res) => {
         new ApiResponse(200, response.data, "Shipment created successfully")
       );
   } catch (error) {
-    console.dir(error.response?.data || error, { depth: null });
     return res.status(500).json(new ApiError(500, "Internal Server Error"));
   }
 };

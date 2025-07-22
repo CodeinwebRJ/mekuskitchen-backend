@@ -8,6 +8,7 @@ const {
   HomePageProduct,
   DeleteProduct,
   SearchProducts,
+  AdminDashboard,
 } = require("../controllers/Product.controller");
 
 const ProductRoute = express.Router();
@@ -20,5 +21,7 @@ ProductRoute.put("/category/:id", EditProduct);
 ProductRoute.delete("/category/delete/:id", DeleteProduct);
 ProductRoute.get("/category/home", HomePageProduct);
 ProductRoute.get("/category/search", SearchProducts);
+ProductRoute.get("/admin/dashboard", AdminDashboard);
+
 
 module.exports = ProductRoute;

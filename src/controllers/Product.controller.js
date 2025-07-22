@@ -3,6 +3,8 @@ const ApiError = require("../utils/ApiError");
 const ProductModel = require("../models/Product.model");
 const TiffinModel = require("../models/TiffinMenu.model");
 const ReviewModel = require("../models/Review.model");
+const OrderModel = require("../models/Order.model");
+const ContactModel = require("../models/Contact.model");
 const mongoose = require("mongoose");
 
 const safeParseJSON = (data, fieldName) => {
@@ -792,6 +794,58 @@ const SearchProducts = async (req, res) => {
   }
 };
 
+const AdminDashboard = async (req, res) => {
+  try {
+    const skuProductCount = await ProductModel.countDocuments({
+      "sku.0": { $exists: true },
+    });
+
+    const normalProductCount = await ProductModel.countDocuments({
+      $or: [{ sku: { $exists: false } }, { sku: { $size: 0 } }, { sku: null }],
+    });
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+
+    const todaysOrderCount = await OrderModel.countDocuments({
+      Orderdate: {
+        $gte: startOfToday,
+        $lte: endOfToday,
+      },
+    });
+
+    const todaysContactCount = await ContactModel.countDocuments({
+      createdAt: {
+        $gte: startOfToday,
+        $lte: endOfToday,
+      },
+    });
+
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          skuProductCount,
+          normalProductCount,
+          todaysOrderCount,
+          todaysContactCount,
+        },
+        "Dashboard data fetched successfully"
+      )
+    );
+  } catch (error) {
+    console.error("Error fetching dashboard data:", error);
+    return res
+      .status(500)
+      .json(
+        new ApiError(500, "Internal server error while fetching dashboard data")
+      );
+  }
+};
+
 module.exports = {
   getAllProducts,
   CreateProduct,
@@ -801,4 +855,5 @@ module.exports = {
   DeleteProduct,
   HomePageProduct,
   SearchProducts,
+  AdminDashboard,
 };

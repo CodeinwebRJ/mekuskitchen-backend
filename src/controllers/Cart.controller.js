@@ -1096,14 +1096,13 @@ const bulkUploadTiffinCart = async (req, res) => {
       }
 
       const singleTiffinTotal = customizedItems.reduce((sum, item) => {
-        console.log(item.price, item.quantity);
         const itemPrice = parseFloat(item.price || 0);
         const itemQty = parseInt(item.quantity || 1);
         return sum + itemPrice * itemQty;
       }, 0);
 
       const totalTiffinAmount = (singleTiffinTotal * parsedQuantity).toFixed(2);
-      if (parseFloat(totalTiffinAmount) !== parsedPrice) {
+      if (parseFloat(totalTiffinAmount) !== parsedPrice * parsedQuantity) {
         return res
           .status(400)
           .json(
@@ -1210,6 +1209,18 @@ const bulkUploadTiffinCart = async (req, res) => {
   }
 };
 
+const areCustomizedItemsEqual = (a = [], b = []) => {
+  if (a.length !== b.length) return false;
+
+  const toIdSet = (arr) => new Set(arr.map((item) => item._id.toString()));
+  const setA = toIdSet(a);
+  const setB = toIdSet(b);
+  return (
+    [...setA].every((id) => setB.has(id)) &&
+    [...setB].every((id) => setA.has(id))
+  );
+};
+
 const UpdateTiffinItem = async (req, res) => {
   try {
     const { user_id, tiffinMenuId, day, customizedItems } = req.body;
@@ -1224,7 +1235,10 @@ const UpdateTiffinItem = async (req, res) => {
     }
 
     const tiffinIndex = cart.tiffins.findIndex(
-      (t) => t.tiffinMenuId === tiffinMenuId && t.day === day
+      (t) =>
+        t.tiffinMenuId === tiffinMenuId &&
+        t.day === day &&
+        areCustomizedItemsEqual(t.customizedItems || [], customizedItems || [])
     );
 
     if (tiffinIndex === -1) {
