@@ -5,6 +5,7 @@ const CartModel = require("../models/Cart.model");
 const ProductModel = require("../models/Product.model");
 const AddressModel = require("../models/Address.model");
 const TiffinMenuModel = require("../models/TiffinMenu.model");
+const sendMail = require("../utils/Nodemailer");
 
 const createOrder = async (req, res) => {
   try {
@@ -21,6 +22,7 @@ const createOrder = async (req, res) => {
       notes = "",
       deliveryTime,
       selfPickup = false,
+      trackingNumber,
     } = req.body;
 
     if (!userId || !orderId || !cartId || !cartAmount || !paymentMethod) {
@@ -90,6 +92,15 @@ const createOrder = async (req, res) => {
       (Number(cartAmount) + Number(taxAmount)).toFixed(2)
     );
 
+    let fullAddress = null;
+
+    if (addressId) {
+      fullAddress = await AddressModel.findById(addressId);
+      if (!fullAddress) {
+        return res.status(404).json(new ApiError(404, "Address not found"));
+      }
+    }
+
     const newOrder = await OrderModel.create({
       userId,
       cartId,
@@ -106,6 +117,8 @@ const createOrder = async (req, res) => {
       grandTotal,
       notes,
       selfPickup,
+      trackingNumber,
+      shippingAddress: fullAddress,
       cartItems: cartItemsWithProducts,
       tiffinItems: tiffinItemsWithDetails,
       Orderdate: new Date(),
@@ -174,7 +187,7 @@ const createOrder = async (req, res) => {
         }
       })
     );
-    ``;
+
     await CartModel.findByIdAndUpdate(cartId, {
       $set: {
         items: [],
@@ -182,6 +195,72 @@ const createOrder = async (req, res) => {
         totalAmount: 0,
       },
     });
+
+    if (cartItemsWithProducts.length > 0 && fullAddress?.billing?.email) {
+      try {
+        const productListHtml = cartItemsWithProducts
+          .map((item) => {
+            const name = item.productDetails?.name || "Unnamed Product";
+            const qty = item.quantity || 1;
+            const price = item.price || 0;
+            const subtotal = qty * price;
+            return `
+            <tr>
+              <td style="padding: 8px 12px;">${name}</td>
+              <td style="padding: 8px 12px; text-align: center;">${qty}</td>
+              <td style="padding: 8px 12px; text-align: right;">₹${price.toFixed(
+                2
+              )}</td>
+              <td style="padding: 8px 12px; text-align: right;">₹${subtotal.toFixed(
+                2
+              )}</td>
+            </tr>
+          `;
+          })
+          .join("");
+
+        const deliveryInfo = selfPickup
+          ? `<p><strong>Pickup:</strong> You have selected self-pickup.</p>`
+          : `<p><strong>Delivery Address:</strong> Your order will be delivered to the address you selected.</p>`;
+
+        const emailHtml = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px; color: #333;">
+            <h2 style="color: #4CAF50;">Thank you for your order!</h2>
+            <p>We have received your order <strong>#${orderId}</strong>. Here are the details:</p>
+
+            <table style="width: 100%; border-collapse: collapse; margin-top: 20px; border: 1px solid #ddd;">
+              <thead>
+                <tr style="background-color: #f5f5f5;">
+                  <th style="padding: 10px 12px; text-align: left;">Product</th>
+                  <th style="padding: 10px 12px;">Qty</th>
+                  <th style="padding: 10px 12px; text-align: right;">Price</th>
+                  <th style="padding: 10px 12px; text-align: right;">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody>${productListHtml}</tbody>
+            </table>
+
+            <p style="margin-top: 20px;"><strong>Total Paid:</strong> ₹${grandTotal.toFixed(
+              2
+            )}</p>
+            ${deliveryInfo}
+            <p style="margin-top: 20px;">If you have any questions, feel free to contact our support team.</p>
+            <p style="margin-top: 20px;">Regards,<br/>The Tiffin Service Team</p>
+          </div>
+        `;
+
+        await sendMail(
+          fullAddress.billing.email,
+          "🧾 Your Order Confirmation – Order #" + orderId,
+          emailHtml
+        );
+      } catch (emailErr) {
+        console.error(
+          "Failed to send order confirmation email:",
+          emailErr.message
+        );
+      }
+    }
 
     return res
       .status(201)

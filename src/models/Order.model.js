@@ -14,10 +14,16 @@ const OrderSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  trackingNumber: {
+    type: String,
+  },
   addressId: {
     type: String,
   },
   paymentMethod: {
+    type: String,
+  },
+  paymentId: {
     type: String,
   },
   paymentStatus: {
