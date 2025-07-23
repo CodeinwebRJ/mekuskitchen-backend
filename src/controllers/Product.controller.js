@@ -5,6 +5,7 @@ const TiffinModel = require("../models/TiffinMenu.model");
 const ReviewModel = require("../models/Review.model");
 const OrderModel = require("../models/Order.model");
 const ContactModel = require("../models/Contact.model");
+const AddressModel = require("../models/Address.model");
 const mongoose = require("mongoose");
 
 const safeParseJSON = (data, fieldName) => {
@@ -142,6 +143,14 @@ const getAllProducts = async (req, res) => {
       .limit(parseInt(limit))
       .select("-__v");
 
+    let activeAddress = null;
+    if (req.user && req.user._id) {
+      activeAddress = await AddressModel.findOne({
+        user: req.user._id,
+        isActive: true,
+      }).lean();
+    }
+
     const response = {
       success: true,
       total,
@@ -149,6 +158,7 @@ const getAllProducts = async (req, res) => {
       limit: parseInt(limit),
       pages: Math.ceil(total / limit),
       data: products,
+      activeAddress: activeAddress || null,
     };
 
     return res
