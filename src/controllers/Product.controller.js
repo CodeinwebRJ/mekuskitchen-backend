@@ -3,15 +3,18 @@ const ApiError = require("../utils/ApiError");
 const ProductModel = require("../models/Product.model");
 const TiffinModel = require("../models/TiffinMenu.model");
 const ReviewModel = require("../models/Review.model");
-const { uploadToCloudinary } = require("../utils/Cloudinary.utils");
-const fs = require("fs");
+const OrderModel = require("../models/Order.model");
+const ContactModel = require("../models/Contact.model");
+const AddressModel = require("../models/Address.model");
 const mongoose = require("mongoose");
 
 const safeParseJSON = (data, fieldName) => {
   try {
     return typeof data === "string" ? JSON.parse(data) : data;
   } catch {
-    throw new ApiError(400, `Invalid JSON for ${fieldName}`);
+    return res
+      .status(400)
+      .json(new ApiError(400, `Invalid JSON for ${fieldName}`));
   }
 };
 
@@ -27,6 +30,7 @@ const getAllProducts = async (req, res) => {
       ProductCategory,
       brand,
       ratings,
+      variation,
       price,
       isActive,
     } = req.body;
@@ -40,14 +44,18 @@ const getAllProducts = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const query = {};
-    if (search) {
-      const sanitizedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      query.$or = [
-        { name: { $regex: sanitizedSearch, $options: "i" } },
-        { description: { $regex: sanitizedSearch, $options: "i" } },
-        { brand: { $regex: sanitizedSearch, $options: "i" } },
-        { shortDescription: { $regex: sanitizedSearch, $options: "i" } },
-      ];
+    const andConditions = [];
+
+    if (search && typeof search === "string") {
+      const regex = new RegExp(search.trim(), "i");
+      andConditions.push({
+        $or: [
+          { name: regex },
+          { description: regex },
+          { brand: regex },
+          { shortDescription: regex },
+        ],
+      });
     }
 
     const sanitizeArray = (arr) =>
@@ -94,8 +102,20 @@ const getAllProducts = async (req, res) => {
 
       if (validRatings.length) {
         const minRating = Math.min(...validRatings);
-        query.avrageRating = { $gte: minRating };
+        query.averageRating = { $gte: minRating };
       }
+    }
+
+    if (variation === "product") {
+      andConditions.push({
+        $or: [{ sku: { $size: 0 } }, { sku: null }],
+      });
+    } else if (variation === "sku") {
+      query["sku.0"] = { $exists: true };
+    }
+
+    if (andConditions.length > 0) {
+      query.$and = andConditions;
     }
 
     const sortStage = {};
@@ -107,7 +127,7 @@ const getAllProducts = async (req, res) => {
         sortStage.price = 1;
         break;
       case "sortbyaverageratings":
-        sortStage.avrageRating = -1;
+        sortStage.averageRating = -1;
         break;
       case "sortbylatest":
         sortStage.createdAt = -1;
@@ -123,21 +143,30 @@ const getAllProducts = async (req, res) => {
       .limit(parseInt(limit))
       .select("-__v");
 
+    let activeAddress = null;
+    if (req.user && req.user._id) {
+      activeAddress = await AddressModel.findOne({
+        user: req.user._id,
+        isActive: true,
+      }).lean();
+    }
+
     const response = {
       success: true,
       total,
-      page,
-      limit,
+      page: parseInt(page),
+      limit: parseInt(limit),
       pages: Math.ceil(total / limit),
       data: products,
+      activeAddress: activeAddress || null,
     };
 
-    res
+    return res
       .status(200)
       .json(new ApiResponse(200, response, "Fetched Data Successfully"));
   } catch (error) {
     console.error("Error in getAllProducts:", error);
-    res
+    return res
       .status(500)
       .json(new ApiError(500, "Server error while fetching products"));
   }
@@ -171,10 +200,13 @@ const CreateProduct = async (req, res) => {
       SKUName,
       isTaxFree,
       currency,
+      manageInvantory,
       aboutItem,
     } = req.body;
 
-    const existingName = await ProductModel.findOne({ name: name.trim() });
+    const existingName = await ProductModel.findOne({
+      name: { $regex: `^${name.trim()}$`, $options: "i" },
+    });
     if (existingName) {
       return res
         .status(400)
@@ -222,8 +254,6 @@ const CreateProduct = async (req, res) => {
     const processedSkus = skuArray.map((skuItem) => ({
       details: skuItem || {},
     }));
-
-    console.log(processedSkus);
 
     if (sizes && Array.isArray(sizes)) {
       for (const size of sizes) {
@@ -282,6 +312,7 @@ const CreateProduct = async (req, res) => {
       tags: tags || [],
       isTaxFree: isTaxFree || false,
       aboutItem: aboutItem || [],
+      manageInvantory: manageInvantory || true,
       isActive: true,
     });
 
@@ -410,6 +441,10 @@ const RelatedProducts = async (req, res) => {
 const EditProduct = async (req, res) => {
   try {
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json(new ApiError(400, "Product ID is required"));
+    }
+
     const {
       name,
       price,
@@ -422,6 +457,8 @@ const EditProduct = async (req, res) => {
       sizes,
       dietaryPreference,
       category,
+      subCategory,
+      subsubCategory,
       brand,
       sku,
       features,
@@ -432,38 +469,27 @@ const EditProduct = async (req, res) => {
       productDetail,
       tags,
       isActive,
+      isTaxFree,
+      aboutItem,
+      manageInvantory,
+      images,
     } = req.body;
 
-    if (!id) {
-      return res.status(400).json(new ApiError(400, "Product ID is required"));
-    }
-
-    const existingName = await ProductModel.findOne({ name });
+    const existingName = await ProductModel.findOne({ name, _id: { $ne: id } });
     if (existingName) {
       return res
         .status(409)
         .json(new ApiError(409, "A product with this name already exists"));
     }
 
-    const imageFiles = req.files?.productImages || [];
-    const skuImages = req.files?.skuImages || [];
-    const MAX_IMAGES = 10;
-
-    if (imageFiles.length > MAX_IMAGES) {
-      return res
-        .status(400)
-        .json(new ApiError(400, `Maximum ${MAX_IMAGES} images allowed`));
-    }
-
     const updateData = {};
-    if (name) updateData.name = name.trim();
 
+    if (name) updateData.name = name.trim();
     if (price !== undefined) {
-      if (price < 0) {
+      if (price < 0)
         return res
           .status(400)
           .json(new ApiError(400, "Price cannot be negative"));
-      }
       updateData.price = price;
     }
 
@@ -485,45 +511,46 @@ const EditProduct = async (req, res) => {
     if (SKUName) updateData.SKUName = SKUName;
     if (description) updateData.description = description;
     if (shortDescription) updateData.shortDescription = shortDescription;
+
     if (stock !== undefined) {
-      if (stock < 0) {
+      if (stock < 0)
         return res
           .status(400)
           .json(new ApiError(400, "Stock cannot be negative"));
-      }
       updateData.stock = stock;
     }
+
     if (dietaryPreference) updateData.dietaryPreference = dietaryPreference;
     if (category) updateData.category = category;
+    if (subCategory) updateData.subCategory = subCategory;
+    if (subsubCategory) updateData.ProductCategory = subsubCategory;
     if (brand) updateData.brand = brand;
     if (features) updateData.features = features;
     if (tags) updateData.tags = tags.map((tag) => tag.trim());
     if (isActive !== undefined) updateData.isActive = isActive;
+    if (isTaxFree !== undefined) updateData.isTaxFree = isTaxFree;
+    if (aboutItem) updateData.aboutItem = aboutItem;
+    if (manageInvantory !== undefined)
+      updateData.manageInvantory = manageInvantory;
 
     if (specifications) {
-      const parsedSpecifications = safeParseJSON(
-        specifications,
-        "specifications"
-      );
-      if (
-        typeof parsedSpecifications !== "object" ||
-        Array.isArray(parsedSpecifications)
-      ) {
+      const parsedSpecs = safeParseJSON(specifications, "specifications");
+      if (typeof parsedSpecs !== "object" || Array.isArray(parsedSpecs)) {
         return res
           .status(400)
           .json(new ApiError(400, "Specifications must be an object"));
       }
-      updateData.specifications = parsedSpecifications;
+      updateData.specifications = parsedSpecs;
     }
 
     if (productDetail) {
-      const parsedProductDetail = safeParseJSON(productDetail, "productDetail");
-      if (!Array.isArray(parsedProductDetail)) {
+      const parsedDetail = safeParseJSON(productDetail, "productDetail");
+      if (!Array.isArray(parsedDetail)) {
         return res
           .status(400)
           .json(new ApiError(400, "productDetail must be an array"));
       }
-      updateData.productDetail = parsedProductDetail;
+      updateData.productDetail = parsedDetail.map((detail) => ({ ...detail }));
     }
 
     if (sizes) {
@@ -551,8 +578,7 @@ const EditProduct = async (req, res) => {
       if (
         (parsedDimensions.length && parsedDimensions.length < 0) ||
         (parsedDimensions.width && parsedDimensions.width < 0) ||
-        (parsedDimensions.height && parsedDimensions.height < 0) ||
-        parsedDimensions.dimensionUnit
+        (parsedDimensions.height && parsedDimensions.height < 0)
       ) {
         return res
           .status(400)
@@ -561,7 +587,7 @@ const EditProduct = async (req, res) => {
       updateData.dimensions = parsedDimensions;
     }
 
-    if (weightUnit !== undefined) {
+    if (weightUnit) {
       const allowedUnits = ["kg", "g", "lb", "oz"];
       if (!allowedUnits.includes(weightUnit)) {
         return res.status(400).json(new ApiError(400, "Invalid weight unit"));
@@ -570,47 +596,30 @@ const EditProduct = async (req, res) => {
     }
 
     if (weight !== undefined) {
-      if (weight < 0) {
+      if (weight < 0)
         return res
           .status(400)
           .json(new ApiError(400, "Weight cannot be negative"));
-      }
       updateData.weight = weight;
     }
 
-    if (imageFiles.length > 0) {
-      const uploadPromises = imageFiles.map((file) =>
-        uploadToCloudinary(file.path)
-      );
-      const uploadResults = await Promise.all(uploadPromises);
-      const imageUrls = uploadResults.map((result, index) => ({
-        url: result.secure_url,
-        isPrimary: index === 0,
-      }));
-      if (
-        !imageUrls.every(
-          (img) => typeof img.url === "string" && img.url.trim() !== ""
-        )
-      ) {
-        return res
-          .status(400)
-          .json(new ApiError(400, "All uploaded images must have valid URLs"));
-      }
-      updateData.images = imageUrls;
+    if (images) {
+      updateData.images = images;
     }
 
     if (sku) {
-      const updatedSkuArray = safeParseJSON(sku, "sku");
-      if (!Array.isArray(updatedSkuArray)) {
+      const parsedSkus = safeParseJSON(sku, "sku");
+      if (!Array.isArray(parsedSkus)) {
         return res.status(400).json(new ApiError(400, "SKU must be an array"));
       }
 
-      const skuCodes = updatedSkuArray.map((item) => item.code);
-      const existingProduct = await ProductModel.findOne({
-        "sku.code": { $in: skuCodes },
+      const skuCodes = parsedSkus.map((item) => item.SKUname);
+      const existingSkuProduct = await ProductModel.findOne({
+        "sku.details.SKUname": { $in: skuCodes },
         _id: { $ne: id },
       });
-      if (existingProduct) {
+
+      if (existingSkuProduct) {
         return res
           .status(409)
           .json(
@@ -621,59 +630,25 @@ const EditProduct = async (req, res) => {
           );
       }
 
-      const MAX_IMAGES_PER_SKU = 5;
-      const uploadedSkuArray = await Promise.all(
-        updatedSkuArray.map(async (skuItem, index) => {
-          try {
-            const { details } = skuItem;
-            let processedDetails = { ...details };
+      const processedSkus = parsedSkus.map((skuItem) => ({
+        details: skuItem || {},
+      }));
 
-            if (skuImages.length > MAX_IMAGES_PER_SKU) {
-              throw new ApiError(
-                400,
-                `Maximum ${MAX_IMAGES_PER_SKU} images allowed per SKU`
-              );
-            }
-
-            if (skuImages.length > 0) {
-              const uploadResults = await Promise.all(
-                skuImages.map((file) => uploadToCloudinary(file.path))
-              );
-
-              processedDetails.images = uploadResults.map((result, i) => ({
-                url: result.secure_url,
-                isPrimary: i === 0,
-              }));
-            } else {
-              processedDetails.images = processedDetails.images || [];
-            }
-
-            return {
-              details: processedDetails,
-            };
-          } catch (error) {
-            return { error, code: skuItem.code };
-          }
-        })
-      );
-      updateData.sku = uploadedSkuArray;
+      updateData.sku = processedSkus;
     }
 
-    const updatedProduct = await ProductModel.findByIdAndUpdate(
+    const updated = await ProductModel.findByIdAndUpdate(
       id,
       { $set: updateData },
-      { new: true, runValidators: true }
+      { new: true }
     );
-
-    if (!updatedProduct) {
+    if (!updated) {
       return res.status(404).json(new ApiError(404, "Product not found"));
     }
 
     return res
       .status(200)
-      .json(
-        new ApiResponse(200, updatedProduct, "Product updated successfully")
-      );
+      .json(new ApiResponse(200, updated, "Product updated successfully"));
   } catch (error) {
     console.error("Error updating product:", error);
     return res
@@ -684,25 +659,26 @@ const EditProduct = async (req, res) => {
           error.message || "Internal server error"
         )
       );
-  } finally {
-    if (req.files && Array.isArray(req.files)) {
-      await Promise.all(
-        req.files.map(async (file) => {
-          try {
-            if (
-              await fs
-                .access(file.path)
-                .then(() => true)
-                .catch(() => false)
-            ) {
-              fs.unlink(file.path);
-            }
-          } catch (error) {
-            console.error(`Error removing file ${file.path}:`, error);
-          }
-        })
-      );
+  }
+};
+
+const DeleteProduct = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const product = await ProductModel.findById(id);
+
+    if (!product) {
+      return res.status(404).json(new ApiError(404, "Product not found"));
     }
+
+    await ProductModel.findByIdAndDelete(id);
+
+    res
+      .status(200)
+      .json(new ApiResponse(200, null, "Product deleted successfully"));
+  } catch (error) {
+    console.log(error);
   }
 };
 
@@ -794,11 +770,100 @@ const HomePageProduct = async (req, res) => {
   }
 };
 
+const SearchProducts = async (req, res) => {
+  try {
+    const { search } = req.query;
+
+    if (!search || search.trim() === "") {
+      return res
+        .status(200)
+        .json(new ApiError(400, "Search query is required."));
+    }
+
+    const searchRegex = new RegExp(search, "i");
+
+    const products = await ProductModel.find({
+      $or: [
+        { name: { $regex: searchRegex } },
+        { SKUName: { $regex: searchRegex } },
+        { tags: { $in: [searchRegex] } },
+      ],
+      isActive: true,
+    });
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, products, "product get successfully"));
+  } catch (error) {
+    console.error("Search error:", error);
+    return res
+      .status(500)
+      .json(
+        new ApiError(500, "Something went wrong while searching for products.")
+      );
+  }
+};
+
+const AdminDashboard = async (req, res) => {
+  try {
+    const skuProductCount = await ProductModel.countDocuments({
+      "sku.0": { $exists: true },
+    });
+
+    const normalProductCount = await ProductModel.countDocuments({
+      $or: [{ sku: { $exists: false } }, { sku: { $size: 0 } }, { sku: null }],
+    });
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+
+    const todaysOrderCount = await OrderModel.countDocuments({
+      Orderdate: {
+        $gte: startOfToday,
+        $lte: endOfToday,
+      },
+    });
+
+    const todaysContactCount = await ContactModel.countDocuments({
+      createdAt: {
+        $gte: startOfToday,
+        $lte: endOfToday,
+      },
+    });
+
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          skuProductCount,
+          normalProductCount,
+          todaysOrderCount,
+          todaysContactCount,
+        },
+        "Dashboard data fetched successfully"
+      )
+    );
+  } catch (error) {
+    console.error("Error fetching dashboard data:", error);
+    return res
+      .status(500)
+      .json(
+        new ApiError(500, "Internal server error while fetching dashboard data")
+      );
+  }
+};
+
 module.exports = {
   getAllProducts,
   CreateProduct,
   getProductById,
   RelatedProducts,
   EditProduct,
+  DeleteProduct,
   HomePageProduct,
+  SearchProducts,
+  AdminDashboard,
 };

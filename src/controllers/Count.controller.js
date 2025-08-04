@@ -88,6 +88,7 @@ const UploadImages = async (req, res) => {
       );
   } catch (error) {
     console.error("Error uploading images:", error);
+    console.log(error);
     return res
       .status(error.statusCode || 500)
       .json(

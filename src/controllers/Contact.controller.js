@@ -7,11 +7,13 @@ const sendQuary = async (req, res) => {
     const { phone, name, phoneCode, email, message } = req.body;
 
     if (email && !/^\S+@\S+\.\S+$/.test(email)) {
-      throw new ApiError(400, "Invalid email format");
+      return res.status(400).json(new ApiError(400, "Invalid email format"));
     }
 
     if (phone && !/^\d{10}$/.test(phone)) {
-      throw new ApiError(400, "Phone number must be 10 digits");
+      return res
+        .status(400)
+        .json(new ApiError(400, "Phone number must be 10 digits"));
     }
 
     const contact = await ContactModel.create({
@@ -23,7 +25,9 @@ const sendQuary = async (req, res) => {
     });
 
     if (!contact) {
-      throw new ApiError(500, "Failed to create contact query");
+      return res
+        .status(500)
+        .json(new ApiError(500, "Failed to create contact query"));
     }
 
     return res
@@ -39,14 +43,38 @@ const sendQuary = async (req, res) => {
 
 const getAllQuarys = async (req, res) => {
   try {
-    const contacts = await ContactModel.find().sort({ createdAt: -1 });
+    const { search } = req.query;
+
+    let filter = {};
+    if (search) {
+      const searchRegex = new RegExp(search, "i");
+
+      if (!isNaN(search)) {
+        filter = {
+          phone: { $regex: searchRegex },
+        };
+      } else {
+        filter = {
+          $or: [
+            { name: searchRegex },
+            { email: searchRegex },
+            { message: searchRegex },
+          ],
+        };
+      }
+    }
+
+    const contacts = await ContactModel.find(filter).sort({ createdAt: -1 });
+
     return res
       .status(200)
       .json(
         new ApiResponse(
           200,
           contacts,
-          "All contact queries fetched successfully"
+          contacts.length > 0
+            ? "Contact queries fetched successfully"
+            : "No contact queries found"
         )
       );
   } catch (error) {

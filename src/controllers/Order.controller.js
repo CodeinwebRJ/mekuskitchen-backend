@@ -3,6 +3,9 @@ const ApiResponse = require("../utils/ApiResponse");
 const OrderModel = require("../models/Order.model");
 const CartModel = require("../models/Cart.model");
 const ProductModel = require("../models/Product.model");
+const AddressModel = require("../models/Address.model");
+const TiffinMenuModel = require("../models/TiffinMenu.model");
+const sendMail = require("../utils/Nodemailer");
 
 const createOrder = async (req, res) => {
   try {
@@ -18,7 +21,8 @@ const createOrder = async (req, res) => {
       taxAmount = 0,
       notes = "",
       deliveryTime,
-      selfPickup,
+      selfPickup = false,
+      trackingNumber,
     } = req.body;
 
     if (!userId || !orderId || !cartId || !cartAmount || !paymentMethod) {
@@ -27,7 +31,7 @@ const createOrder = async (req, res) => {
         .json(
           new ApiError(
             400,
-            "Missing required fields: userId, cartId, addressId, paymentMethod, and cartAmount are required"
+            "Missing required fields: userId, cartId, orderId, paymentMethod, and cartAmount are required"
           )
         );
     }
@@ -51,27 +55,51 @@ const createOrder = async (req, res) => {
     const cartItemsWithProducts = await Promise.all(
       (cart.items || []).map(async (item) => {
         const product = await ProductModel.findById(item.product_id);
-
         if (!product) {
-          throw new Error(`Product not found for ID: ${item.product_id}`);
-        }
-
-        if (product.stock !== undefined && product.stock < item.quantity) {
-          throw new Error(
-            `Insufficient stock for product: ${product.name}. Requested: ${item.quantity}, Available: ${product.stock}`
-          );
+          return res
+            .status(404)
+            .json(new ApiError(`Product not found for ID: ${item.product_id}`));
         }
 
         return {
           ...(item.toObject?.() || item),
-          productDetails: product || null,
+          productDetails: product,
+        };
+      })
+    );
+
+    const tiffinItemsWithDetails = await Promise.all(
+      (cart.tiffins || []).map(async (tiffin) => {
+        const tiffinMenu = await TiffinMenuModel.findById(tiffin.tiffinMenuId);
+        if (!tiffinMenu) {
+          return res
+            .status(404)
+            .json(
+              new ApiError(
+                `Tiffin menu not found for ID: ${tiffin.tiffinMenuId}`
+              )
+            );
+        }
+
+        return {
+          ...(tiffin.toObject?.() || tiffin),
+          tiffinMenuDetails: tiffinMenu,
         };
       })
     );
 
     const grandTotal = parseFloat(
-      (Number(cartAmount || 0) + Number(taxAmount || 0)).toFixed(2)
+      (Number(cartAmount) + Number(taxAmount)).toFixed(2)
     );
+
+    let fullAddress = null;
+
+    if (addressId) {
+      fullAddress = await AddressModel.findById(addressId);
+      if (!fullAddress) {
+        return res.status(404).json(new ApiError(404, "Address not found"));
+      }
+    }
 
     const newOrder = await OrderModel.create({
       userId,
@@ -79,7 +107,7 @@ const createOrder = async (req, res) => {
       orderId,
       addressId: addressId || "",
       paymentMethod,
-      paymentStatus: "Pending",
+      paymentStatus: "Paid",
       orderStatus: "Pending",
       deliveryTime: deliveryTime ? new Date(deliveryTime) : undefined,
       cartAmount,
@@ -88,18 +116,75 @@ const createOrder = async (req, res) => {
       taxAmount,
       grandTotal,
       notes,
-      selfPickup: selfPickup ?? false,
+      selfPickup,
+      trackingNumber,
+      shippingAddress: fullAddress,
       cartItems: cartItemsWithProducts,
+      tiffinItems: tiffinItemsWithDetails,
       Orderdate: new Date(),
     });
 
     await Promise.all(
       (cart.items || []).map(async (item) => {
-        await ProductModel.findByIdAndUpdate(
-          item.product_id,
-          { $inc: { stock: -item.quantity } },
-          { new: true }
-        );
+        const product = await ProductModel.findById(item.product_id);
+        if (!product || !product.manageInventory) return;
+
+        if (item.sku?.skuId) {
+          const updatedSkus = product.sku.map((sku) => {
+            if (sku._id.toString() !== item.sku.skuId.toString()) return sku;
+
+            const detailsObject =
+              sku.details instanceof Map
+                ? Object.fromEntries(sku.details.entries())
+                : sku.details;
+
+            const combinationsArray = detailsObject?.combinations || [];
+
+            if (combinationsArray.length > 0 && item.combination) {
+              const updatedCombinations = combinationsArray.map((combo) => {
+                const isMatch = Object.entries(item.combination).every(
+                  ([key, value]) => combo[key] === value
+                );
+
+                return {
+                  ...combo,
+                  Stock: isMatch
+                    ? Math.max((combo.Stock || 0) - item.quantity, 0)
+                    : combo.Stock,
+                };
+              });
+
+              return {
+                ...(sku.toObject?.() || sku),
+                details: {
+                  ...detailsObject,
+                  combinations: updatedCombinations,
+                },
+              };
+            } else {
+              return {
+                ...(sku.toObject?.() || sku),
+                details: {
+                  ...detailsObject,
+                  Stock: Math.max(
+                    (detailsObject?.Stock || 0) - item.quantity,
+                    0
+                  ),
+                },
+              };
+            }
+          });
+
+          await ProductModel.findByIdAndUpdate(item.product_id, {
+            $set: { sku: updatedSkus },
+          });
+        } else {
+          await ProductModel.findByIdAndUpdate(
+            item.product_id,
+            { $inc: { stock: -item.quantity } },
+            { new: true }
+          );
+        }
       })
     );
 
@@ -111,9 +196,75 @@ const createOrder = async (req, res) => {
       },
     });
 
+    if (cartItemsWithProducts.length > 0 && fullAddress?.billing?.email) {
+      try {
+        const productListHtml = cartItemsWithProducts
+          .map((item) => {
+            const name = item.productDetails?.name || "Unnamed Product";
+            const qty = item.quantity || 1;
+            const price = item.price || 0;
+            const subtotal = qty * price;
+            return `
+            <tr>
+              <td style="padding: 8px 12px;">${name}</td>
+              <td style="padding: 8px 12px; text-align: center;">${qty}</td>
+              <td style="padding: 8px 12px; text-align: right;">₹${price.toFixed(
+                2
+              )}</td>
+              <td style="padding: 8px 12px; text-align: right;">₹${subtotal.toFixed(
+                2
+              )}</td>
+            </tr>
+          `;
+          })
+          .join("");
+
+        const deliveryInfo = selfPickup
+          ? `<p><strong>Pickup:</strong> You have selected self-pickup.</p>`
+          : `<p><strong>Delivery Address:</strong> Your order will be delivered to the address you selected.</p>`;
+
+        const emailHtml = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px; color: #333;">
+            <h2 style="color: #4CAF50;">Thank you for your order!</h2>
+            <p>We have received your order <strong>#${orderId}</strong>. Here are the details:</p>
+
+            <table style="width: 100%; border-collapse: collapse; margin-top: 20px; border: 1px solid #ddd;">
+              <thead>
+                <tr style="background-color: #f5f5f5;">
+                  <th style="padding: 10px 12px; text-align: left;">Product</th>
+                  <th style="padding: 10px 12px;">Qty</th>
+                  <th style="padding: 10px 12px; text-align: right;">Price</th>
+                  <th style="padding: 10px 12px; text-align: right;">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody>${productListHtml}</tbody>
+            </table>
+
+            <p style="margin-top: 20px;"><strong>Total Paid:</strong> ₹${grandTotal.toFixed(
+              2
+            )}</p>
+            ${deliveryInfo}
+            <p style="margin-top: 20px;">If you have any questions, feel free to contact our support team.</p>
+            <p style="margin-top: 20px;">Regards,<br/>The Tiffin Service Team</p>
+          </div>
+        `;
+
+        await sendMail(
+          fullAddress.billing.email,
+          "🧾 Your Order Confirmation – Order #" + orderId,
+          emailHtml
+        );
+      } catch (emailErr) {
+        console.error(
+          "Failed to send order confirmation email:",
+          emailErr.message
+        );
+      }
+    }
+
     return res
       .status(201)
-      .json(new ApiResponse(201, newOrder, "Order created successfully"));
+      .json(new ApiResponse(200, newOrder, "Order created successfully"));
   } catch (error) {
     console.error("Create order error:", error);
     return res
@@ -149,8 +300,15 @@ const getOrderById = async (req, res) => {
 
 const getAllOrders = async (req, res) => {
   try {
-    const { startDate, endDate, specificDate, dateRange, orderStatus } =
-      req.query;
+    const {
+      startDate,
+      endDate,
+      specificDate,
+      dateRange,
+      orderStatus,
+      orderId,
+      orderFilters,
+    } = req.query;
 
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
@@ -160,6 +318,16 @@ const getAllOrders = async (req, res) => {
 
     if (orderStatus) {
       filter.orderStatus = orderStatus;
+    }
+
+    if (orderId) {
+      filter.orderId = orderId;
+    }
+
+    if (orderFilters === "product") {
+      filter.cartItems = { $exists: true, $not: { $size: 0 } };
+    } else if (orderFilters === "tiffin") {
+      filter.tiffinItems = { $exists: true, $not: { $size: 0 } };
     }
 
     if (startDate || endDate || specificDate || dateRange) {
@@ -223,10 +391,26 @@ const getAllOrders = async (req, res) => {
 
     const total = await OrderModel.countDocuments(filter);
 
-    const orders = await OrderModel.find(filter)
+    const rawOrders = await OrderModel.find(filter)
       .sort({ Orderdate: -1 })
       .skip(skip)
-      .limit(limit);
+      .limit(limit)
+      .lean();
+
+    const addressIds = rawOrders
+      .map((order) => order.addressId)
+      .filter(Boolean);
+    const addresses = await AddressModel.find({
+      _id: { $in: addressIds },
+    }).lean();
+    const addressMap = new Map(
+      addresses.map((addr) => [addr._id.toString(), addr])
+    );
+
+    const orders = rawOrders.map((order) => ({
+      ...order,
+      address: addressMap.get(order.addressId?.toString()) || null,
+    }));
 
     return res.status(200).json(
       new ApiResponse(
@@ -266,9 +450,28 @@ const getOrdersByUser = async (req, res) => {
 
     const orders = await OrderModel.find(filter).sort({ Orderdate: -1 });
 
+    const ordersWithAddress = await Promise.all(
+      orders.map(async (order) => {
+        let addressData = null;
+        if (order.addressId) {
+          addressData = await AddressModel.findById(order.addressId);
+        }
+        return {
+          ...order.toObject(),
+          address: addressData,
+        };
+      })
+    );
+
     return res
       .status(200)
-      .json(new ApiResponse(200, orders, "User orders fetched successfully"));
+      .json(
+        new ApiResponse(
+          200,
+          ordersWithAddress,
+          "User orders fetched successfully"
+        )
+      );
   } catch (error) {
     console.error("Get user orders error:", error);
     return res.status(500).json(new ApiError(500, "Internal server error"));
@@ -368,6 +571,76 @@ const cancelOrder = async (req, res) => {
   }
 };
 
+const getAllTiffinOrders = async (req, res) => {
+  try {
+    const { date, orderId, page = 1, limit = 10 } = req.query;
+    const skip = (page - 1) * limit;
+
+    let filter = {
+      tiffinItems: { $exists: true, $not: { $size: 0 } },
+    };
+
+    if (orderId) {
+      const parsedOrderId = Number(orderId);
+      if (!isNaN(parsedOrderId)) {
+        filter.orderId = parsedOrderId;
+      }
+    }
+
+    if (date) {
+      const targetDate = new Date(date).toDateString();
+
+      filter["tiffinItems.deliveryDate"] = {
+        $regex: `^${targetDate}`,
+        $options: "i",
+      };
+    }
+
+    const total = await OrderModel.countDocuments(filter);
+
+    const rawOrders = await OrderModel.find(filter)
+      .sort({ Orderdate: -1 })
+      .skip(Number(skip))
+      .limit(Number(limit))
+      .lean();
+
+    const addressIds = rawOrders
+      .map((order) => order.addressId)
+      .filter(Boolean);
+
+    const addresses = await AddressModel.find({
+      _id: { $in: addressIds },
+    }).lean();
+
+    const addressMap = new Map(
+      addresses.map((addr) => [addr._id.toString(), addr])
+    );
+
+    const orders = rawOrders.map((order) => ({
+      ...order,
+      address: addressMap.get(order.addressId?.toString()) || null,
+    }));
+
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          success: true,
+          total,
+          page: String(page),
+          limit: String(limit),
+          pages: Math.ceil(total / limit),
+          orders,
+        },
+        "Tiffin orders fetched successfully"
+      )
+    );
+  } catch (error) {
+    console.error("Get all tiffin orders error:", error);
+    return res.status(500).json(new ApiError(500, "Internal server error"));
+  }
+};
+
 module.exports = {
   createOrder,
   getOrderById,
@@ -375,4 +648,5 @@ module.exports = {
   getOrdersByUser,
   updateOrderStatus,
   cancelOrder,
+  getAllTiffinOrders,
 };

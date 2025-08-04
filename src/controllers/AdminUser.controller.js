@@ -24,7 +24,9 @@ const RegiesterAdmin = async (req, res) => {
     const existing = await AdminModel.findOne({ email });
 
     if (existing) {
-      return res.status(409).json(new ApiError(409, "Admin already exists"));
+      return res
+        .status(409)
+        .json(new ApiError(409, "Admin user is already exists"));
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -55,7 +57,7 @@ const AdminLogin = async (req, res) => {
 
     const admin = await AdminModel.findOne({ uniqueId });
     if (!admin) {
-      return res.status(404).json(new ApiError(404, "Admin not found"));
+      return res.status(404).json(new ApiError(404, "Invalid credentials"));
     }
 
     const isPasswordValid = await bcrypt.compare(password, admin.password);
@@ -85,7 +87,7 @@ const SendOtp = async (req, res) => {
 
     const admin = await AdminModel.findOne({ email });
     if (!admin) {
-      return res.status(404).json(new ApiError(404, "Admin not found"));
+      return res.status(404).json(new ApiError(404, "Admin user not found"));
     }
 
     const otp = generateOTP();
@@ -127,10 +129,9 @@ const ForgotPassword = async (req, res) => {
 
     await admin.save();
 
-    return res.status(200).json({
-      success: true,
-      message: "Password has been reset successfully",
-    });
+    return res
+      .status(200)
+      .json(new ApiResponse(200, null, "Password reset successfully"));
   } catch (error) {
     console.error("ForgotPassword Error:", error);
     return res.status(500).json(new ApiError(500, "Internal Server Error"));
@@ -139,18 +140,16 @@ const ForgotPassword = async (req, res) => {
 
 const UpdateProfile = async (req, res) => {
   try {
-    const { email, name, phone, avatar, oldPassword, newPassword } = req.body;
+    const { id, email, name, phone, avatar, oldPassword, newPassword } =
+      req.body;
 
-    if (!email) {
-      return res.status(400).json(new ApiError(400, "Email is required"));
-    }
-
-    const admin = await AdminModel.findOne({ email });
+    const admin = await AdminModel.findById(id);
     if (!admin) {
       return res.status(404).json(new ApiError(404, "Admin not found"));
     }
 
     if (name) admin.name = name;
+    if (email) admin.email = email;
     if (phone) admin.phone = phone;
     if (avatar) admin.avatar = avatar;
 
@@ -159,7 +158,12 @@ const UpdateProfile = async (req, res) => {
       if (!isMatch) {
         return res
           .status(401)
-          .json(new ApiError(401, "Old password is incorrect"));
+          .json(
+            new ApiError(
+              401,
+              "Old password is incorrect Please enter correct password"
+            )
+          );
       }
 
       const hashedPassword = await bcrypt.hash(newPassword, 10);
@@ -177,11 +181,9 @@ const UpdateProfile = async (req, res) => {
 
     await admin.save();
 
-    return res.status(200).json({
-      success: true,
-      message: "Profile updated successfully",
-      data: admin,
-    });
+    return res
+      .status(200)
+      .json(new ApiResponse(200, admin, "Profile updated successfully"));
   } catch (error) {
     console.error("UpdateProfile Error:", error);
     return res.status(500).json(new ApiError(500, "Internal Server Error"));

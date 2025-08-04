@@ -16,10 +16,12 @@ const getAllCoupons = async (req, res) => {
       expired,
       category,
       subCategory,
+      code,
       productCategory,
     } = req.query;
 
     const query = {};
+
     if (isActive !== undefined) {
       if (!["true", "false"].includes(isActive)) {
         return res
@@ -27,6 +29,10 @@ const getAllCoupons = async (req, res) => {
           .json(new ApiError(400, "isActive must be 'true' or 'false'"));
       }
       query.isActive = isActive === "true";
+    }
+
+    if (code) {
+      query.code = { $regex: new RegExp(code, "i") };
     }
 
     if (discountType) {
@@ -40,36 +46,32 @@ const getAllCoupons = async (req, res) => {
       query.discountType = discountType;
     }
 
+    const now = new Date();
     if (expired === "true") {
-      query.expiresAt = { $lt: new Date() };
+      query.expiresAt = { $lt: now };
     } else if (expired === "false") {
-      query.$or = [{ expiresAt: { $gte: new Date() } }, { expiresAt: null }];
+      query.$or = [{ expiresAt: { $gte: now } }, { expiresAt: null }];
     }
-    if (category) {
-      query.category = { $in: Array.isArray(category) ? category : [category] };
-    }
-    if (subCategory) {
-      query.subCategory = {
-        $in: Array.isArray(subCategory) ? subCategory : [subCategory],
-      };
-    }
-    if (productCategory) {
-      query.ProductCategory = {
-        $in: Array.isArray(productCategory)
-          ? productCategory
-          : [productCategory],
-      };
-    }
+
+    const parseList = (val) =>
+      Array.isArray(val)
+        ? val
+        : String(val)
+            .split(",")
+            .map((v) => v.trim());
+
+    if (category) query.category = { $in: parseList(category) };
+    if (subCategory) query.subCategory = { $in: parseList(subCategory) };
+    if (productCategory)
+      query.ProductCategory = { $in: parseList(productCategory) };
 
     const pageNum = parseInt(page, 10);
     const limitNum = parseInt(limit, 10);
-
     if (isNaN(pageNum) || pageNum < 1) {
       return res
         .status(400)
-        .json(new ApiError(400, "Page number must be a positive integer"));
+        .json(new ApiError(400, "Page must be a positive integer"));
     }
-
     if (isNaN(limitNum) || limitNum < 1 || limitNum > 50) {
       return res
         .status(400)
@@ -91,7 +93,7 @@ const getAllCoupons = async (req, res) => {
     const [coupons, totalCount] = await Promise.all([
       CouponModel.find(query)
         .select(
-          "name code discountType discountValue minOrderAmount startAt expiresAt usageLimit usedCount image termsAndConditions description isActive category subCategory ProductCategory"
+          "name code discountType discountValue minOrderAmount startAt expiresAt usageLimit usedCount image termsAndConditions description isActive category subCategory ProductCategory allProducts isMultiple"
         )
         .sort({ [sortField]: sortDirection })
         .skip((pageNum - 1) * limitNum)
@@ -100,6 +102,8 @@ const getAllCoupons = async (req, res) => {
       CouponModel.countDocuments(query),
     ]);
 
+    const totalPages = Math.ceil(totalCount / limitNum) || 1;
+
     return res.status(200).json(
       new ApiResponse(
         200,
@@ -107,10 +111,10 @@ const getAllCoupons = async (req, res) => {
           coupons,
           pagination: {
             currentPage: pageNum,
-            totalPages: Math.ceil(totalCount / limitNum) || 1,
+            totalPages,
             totalItems: totalCount,
             limit: limitNum,
-            hasNextPage: pageNum < Math.ceil(totalCount / limitNum),
+            hasNextPage: pageNum < totalPages,
             hasPreviousPage: pageNum > 1,
           },
         },
@@ -160,11 +164,8 @@ const ValidateCoupon = async (req, res) => {
       }
       const [day, month, year] = date.split("-").map(Number);
       validationDate = new Date(year, month - 1, day);
-      if (
-        isNaN(validationDate.getTime()) ||
-        validationDate.getFullYear() !== year
-      ) {
-        return res.status(400).json(new ApiError(400, "Invalid date values."));
+      if (isNaN(validationDate.getTime())) {
+        return res.status(400).json(new ApiError(400, "Invalid date value"));
       }
     }
 
@@ -181,7 +182,6 @@ const ValidateCoupon = async (req, res) => {
         { expiresAt: { $exists: false } },
         { expiresAt: { $gte: validationDate } },
       ],
-      $expr: { $lt: ["$usedCount", "$usageLimit"] },
     });
 
     if (!coupon) {
@@ -190,12 +190,12 @@ const ValidateCoupon = async (req, res) => {
         .json(
           new ApiError(
             404,
-            "Coupon not found, inactive, or usage limit reached"
+            "Coupon not found, inactive, expired, or usage limit reached"
           )
         );
     }
 
-    if (coupon.usedBy.includes(userId)) {
+    if (!coupon.isMultiple && coupon.usedBy.includes(userId)) {
       return res
         .status(400)
         .json(new ApiError(400, "You have already used this coupon"));
@@ -207,65 +207,73 @@ const ValidateCoupon = async (req, res) => {
       ProductCategory: ProductCategory?.split(",").map((c) => c.trim()) || [],
     };
 
-    const hasCategoryRestriction =
-      coupon.category?.length ||
-      coupon.subCategory?.length ||
-      coupon.ProductCategory?.length;
+    if (!coupon.allProducts) {
+      const hasCategoryRestriction =
+        coupon.category?.length ||
+        coupon.subCategory?.length ||
+        coupon.ProductCategory?.length;
 
-    if (hasCategoryRestriction) {
-      let matched = false;
-      const couponCategoryNames = coupon.category?.map((cat) => cat) || [];
-      const fullCategories = await CategoryModel.find({
-        $or: [{ name: { $in: couponCategoryNames } }],
-        isActive: true,
-      }).lean();
+      if (hasCategoryRestriction) {
+        let matched = false;
 
-      for (const cat of fullCategories) {
-        if (
-          inputCategories.category.includes(String(cat._id)) ||
-          inputCategories.category.includes(cat.name)
-        ) {
-          matched = true;
-          break;
+        const couponCategoryNames = coupon.category || [];
+        const fullCategories = await CategoryModel.find({
+          $or: [{ name: { $in: couponCategoryNames } }],
+          isActive: true,
+        }).lean();
+
+        for (const cat of fullCategories) {
+          if (
+            inputCategories.category.includes(String(cat._id)) ||
+            inputCategories.category.includes(cat.name)
+          ) {
+            matched = true;
+            break;
+          }
+
+          const subCatIds =
+            cat.subCategories?.map((sc) => String(sc._id)) || [];
+          const subCatNames = cat.subCategories?.map((sc) => sc.name) || [];
+
+          if (
+            subCatIds.some((id) => inputCategories.subCategory.includes(id)) ||
+            subCatNames.some((name) =>
+              inputCategories.subCategory.includes(name)
+            )
+          ) {
+            matched = true;
+            break;
+          }
+
+          const subSubCatIds =
+            cat.subCategories?.flatMap(
+              (sc) => sc.subSubCategories?.map((ssc) => String(ssc._id)) || []
+            ) || [];
+          const subSubCatNames =
+            cat.subCategories?.flatMap(
+              (sc) => sc.subSubCategories?.map((ssc) => ssc.name) || []
+            ) || [];
+
+          if (
+            subSubCatIds.some((id) =>
+              inputCategories.ProductCategory.includes(id)
+            ) ||
+            subSubCatNames.some((name) =>
+              inputCategories.ProductCategory.includes(name)
+            )
+          ) {
+            matched = true;
+            break;
+          }
         }
 
-        const subCatIds = cat.subCategories?.map((sc) => String(sc._id)) || [];
-        const subCatNames = cat.subCategories?.map((sc) => sc.name) || [];
-        if (
-          subCatIds.some((id) => inputCategories.subCategory.includes(id)) ||
-          subCatNames.some((name) => inputCategories.subCategory.includes(name))
-        ) {
-          matched = true;
-          break;
+        if (!matched) {
+          return res
+            .status(400)
+            .json(
+              new ApiError(400, "Coupon not applicable to selected categories")
+            );
         }
-
-        const subSubCatIds =
-          cat.subCategories?.flatMap(
-            (sc) => sc.subSubCategories?.map((ssc) => String(ssc._id)) || []
-          ) || [];
-        const subSubCatNames =
-          cat.subCategories?.flatMap(
-            (sc) => sc.subSubCategories?.map((ssc) => ssc.name) || []
-          ) || [];
-        if (
-          subSubCatIds.some((id) =>
-            inputCategories.ProductCategory.includes(id)
-          ) ||
-          subSubCatNames.some((name) =>
-            inputCategories.ProductCategory.includes(name)
-          )
-        ) {
-          matched = true;
-          break;
-        }
-      }
-
-      if (!matched) {
-        return res
-          .status(400)
-          .json(
-            new ApiError(400, "Coupon not applicable to selected categories")
-          );
       }
     }
 
@@ -283,20 +291,21 @@ const ValidateCoupon = async (req, res) => {
     let discount = 0;
     if (coupon.discountType === "percentage") {
       discount = (coupon.discountValue / 100) * orderAmount;
-      discount = Math.min(discount, orderAmount);
     } else if (coupon.discountType === "fixed") {
-      discount = Math.min(coupon.discountValue, orderAmount);
+      discount = coupon.discountValue;
     }
-
+    discount = Math.min(discount, orderAmount);
     discount = Math.round(discount * 100) / 100;
 
-    await CouponModel.updateOne(
-      { _id: coupon._id },
-      {
-        $addToSet: { usedBy: userId },
-        $inc: { usedCount: 1 },
-      }
-    );
+    const updateOps = {
+      $addToSet: { usedBy: userId },
+    };
+
+    if (coupon.usageLimit && coupon.usageLimit > 0) {
+      updateOps.$inc = { usedCount: 1 };
+    }
+
+    await CouponModel.updateOne({ _id: coupon._id }, updateOps);
 
     const cart = await CartModel.findOne({ user: userId });
     if (cart) {
@@ -309,8 +318,9 @@ const ValidateCoupon = async (req, res) => {
 
     let formattedExpiresAt = null;
     if (coupon.expiresAt) {
-      const expiresDate = new Date(coupon.expiresAt);
-      formattedExpiresAt = expiresDate.toLocaleDateString("en-GB");
+      formattedExpiresAt = new Date(coupon.expiresAt).toLocaleDateString(
+        "en-GB"
+      );
     }
 
     return res.status(200).json(
@@ -324,8 +334,11 @@ const ValidateCoupon = async (req, res) => {
           discountValue: coupon.discountValue,
           minOrderAmount: coupon.minOrderAmount || 0,
           expiresAt: formattedExpiresAt,
-          usageLimit: coupon.usageLimit,
-          usedCount: coupon.usedCount + 1,
+          usageLimit: coupon.usageLimit || null,
+          usedCount:
+            coupon.usageLimit && coupon.usageLimit > 0
+              ? coupon.usedCount + 1
+              : null,
         },
         "Coupon validated successfully"
       )
@@ -353,6 +366,9 @@ const CreateCoupons = async (req, res) => {
       category,
       subCategory,
       ProductCategory,
+      allProducts,
+      isMultiple,
+      isTiffin,
     } = req.body;
 
     if (!code || !discountType || !discountValue) {
@@ -369,16 +385,21 @@ const CreateCoupons = async (req, res) => {
     const validateStringArray = (arr, fieldName) => {
       if (arr !== undefined) {
         if (!Array.isArray(arr)) {
-          throw new ApiError(400, `${fieldName} must be an array of strings`);
+          return res
+            .status(400)
+            .json(
+              new ApiError(400, `${fieldName} must be an array of strings`)
+            );
         }
         const isValid = arr.every(
           (item) => typeof item === "string" && item.trim() !== ""
         );
         if (!isValid) {
-          throw new ApiError(
-            400,
-            `Each ${fieldName} must be a non-empty string`
-          );
+          return res
+            .status(400)
+            .json(
+              new ApiError(400, `Each ${fieldName} must be a non-empty string`)
+            );
         }
         return arr.map((item) => item.trim());
       }
@@ -461,7 +482,7 @@ const CreateCoupons = async (req, res) => {
     let parsedUsageLimit = 1;
     if (usageLimit !== undefined) {
       parsedUsageLimit = parseInt(usageLimit);
-      if (isNaN(parsedUsageLimit) || parsedUsageLimit <= 0) {
+      if (isNaN(parsedUsageLimit)) {
         return res
           .status(400)
           .json(new ApiError(400, "Usage limit must be a positive integer"));
@@ -475,6 +496,11 @@ const CreateCoupons = async (req, res) => {
     }
 
     const parsedIsActive = isActive !== undefined ? Boolean(isActive) : true;
+    const parsedIsTiffin = isTiffin !== undefined ? Boolean(isTiffin) : true;
+    const parsedIsMultiple =
+      isMultiple !== undefined ? Boolean(isMultiple) : false;
+    const parsedAllProducts =
+      allProducts !== undefined ? Boolean(allProducts) : false;
 
     const existingCoupon = await CouponModel.findOne({ code: trimmedCode });
     if (existingCoupon) {
@@ -495,11 +521,14 @@ const CreateCoupons = async (req, res) => {
       usedBy: [],
       image,
       isActive: parsedIsActive,
+      isMultiple: parsedIsMultiple,
+      allProducts: parsedAllProducts,
       termsAndConditions,
       description,
       category: parsedCategory,
       subCategory: parsedSubCategory,
       ProductCategory: parsedProductCategory,
+      isTiffin: parsedIsTiffin,
     });
 
     await coupon.save();
@@ -531,6 +560,12 @@ const EditCoupons = async (req, res) => {
       isActive,
       termsAndConditions,
       description,
+      isMultiple,
+      allProducts,
+      category,
+      subCategory,
+      ProductCategory,
+      isTiffin,
     } = req.body;
 
     if (!couponId) {
@@ -610,12 +645,7 @@ const EditCoupons = async (req, res) => {
         if (isNaN(parsedStartAt.getTime())) {
           return res
             .status(400)
-            .json(
-              new ApiError(
-                400,
-                "Invalid startAt date format. Use ISO 8601 format"
-              )
-            );
+            .json(new ApiError(400, "Invalid startAt date format"));
         }
         updateData.startAt = parsedStartAt;
       }
@@ -629,18 +659,16 @@ const EditCoupons = async (req, res) => {
         if (isNaN(parsedExpiresAt.getTime())) {
           return res
             .status(400)
-            .json(
-              new ApiError(
-                400,
-                "Invalid expiresAt date format. Use ISO 8601 format"
-              )
-            );
+            .json(new ApiError(400, "Invalid expiresAt date format"));
         }
-        if (updateData.startAt && parsedExpiresAt <= updateData.startAt) {
+
+        const startTime = updateData.startAt || coupon.startAt;
+        if (startTime && parsedExpiresAt <= startTime) {
           return res
             .status(400)
             .json(new ApiError(400, "expiresAt must be after startAt"));
         }
+
         updateData.expiresAt = parsedExpiresAt;
       }
     }
@@ -656,10 +684,7 @@ const EditCoupons = async (req, res) => {
         return res
           .status(400)
           .json(
-            new ApiError(
-              400,
-              "Usage limit cannot be less than current used count"
-            )
+            new ApiError(400, "Usage limit cannot be less than used count")
           );
       }
       updateData.usageLimit = parsedUsageLimit;
@@ -669,7 +694,7 @@ const EditCoupons = async (req, res) => {
       if (image !== null && typeof image !== "string") {
         return res
           .status(400)
-          .json(new ApiError(400, "Image must be a valid string URL or null"));
+          .json(new ApiError(400, "Image must be a valid string or null"));
       }
       updateData.image = image;
     }
@@ -678,39 +703,76 @@ const EditCoupons = async (req, res) => {
       updateData.isActive = Boolean(isActive);
     }
 
+    if (isMultiple !== undefined) {
+      updateData.isMultiple = Boolean(isMultiple);
+    }
+
+    if (isTiffin !== undefined) {
+      updateData.isTiffin = Boolean(isTiffin);
+    }
+
+    if (allProducts !== undefined) {
+      updateData.allProducts = Boolean(allProducts);
+    }
+
     if (termsAndConditions !== undefined) {
-      if (termsAndConditions !== null) {
+      if (termsAndConditions === null) {
+        updateData.termsAndConditions = null;
+      } else {
         const trimmedTerms = termsAndConditions.trim().replace(/[<>&"]/g, "");
         if (trimmedTerms.length > 1000) {
           return res
             .status(400)
             .json(
-              new ApiError(
-                400,
-                "Terms and conditions cannot exceed 1000 characters"
-              )
+              new ApiError(400, "Terms and conditions too long (max 1000)")
             );
         }
         updateData.termsAndConditions = trimmedTerms;
-      } else {
-        updateData.termsAndConditions = null;
       }
     }
 
     if (description !== undefined) {
-      if (description !== null) {
-        const trimmedDescription = description.trim().replace(/[<>&"]/g, "");
-        if (trimmedDescription.length > 500) {
+      if (description === null) {
+        updateData.description = null;
+      } else {
+        const trimmedDesc = description.trim().replace(/[<>&"]/g, "");
+        if (trimmedDesc.length > 500) {
           return res
             .status(400)
-            .json(
-              new ApiError(400, "Description cannot exceed 500 characters")
-            );
+            .json(new ApiError(400, "Description too long (max 500)"));
         }
-        updateData.description = trimmedDescription;
-      } else {
-        updateData.description = null;
+        updateData.description = trimmedDesc;
       }
+    }
+
+    // ✅ Category, SubCategory, ProductCategory
+    if (category !== undefined) {
+      if (!Array.isArray(category)) {
+        return res
+          .status(400)
+          .json(new ApiError(400, "Category must be an array"));
+      }
+      updateData.category = category.map((c) => String(c).trim());
+    }
+
+    if (subCategory !== undefined) {
+      if (!Array.isArray(subCategory)) {
+        return res
+          .status(400)
+          .json(new ApiError(400, "SubCategory must be an array"));
+      }
+      updateData.subCategory = subCategory.map((sc) => String(sc).trim());
+    }
+
+    if (ProductCategory !== undefined) {
+      if (!Array.isArray(ProductCategory)) {
+        return res
+          .status(400)
+          .json(new ApiError(400, "ProductCategory must be an array"));
+      }
+      updateData.ProductCategory = ProductCategory.map((pc) =>
+        String(pc).trim()
+      );
     }
 
     if (Object.keys(updateData).length === 0) {
@@ -724,10 +786,6 @@ const EditCoupons = async (req, res) => {
       { $set: updateData },
       { new: true, runValidators: true }
     ).lean();
-
-    if (!updatedCoupon) {
-      return res.status(404).json(new ApiError(404, "Coupon not found"));
-    }
 
     return res
       .status(200)
@@ -767,10 +825,186 @@ const DeleteCoupons = async (req, res) => {
   }
 };
 
+const RemoveCoupon = async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    const cart = await CartModel.findOne({ user: userId });
+    if (!cart) {
+      return res.status(404).json(new ApiError(404, "Cart not found"));
+    }
+
+    cart.discount = 0;
+    cart.discountValue = 0;
+    cart.discountType = null;
+    cart.couponCode = null;
+
+    let productTotal = cart.items.reduce(
+      (acc, item) => acc + item.quantity * item.price,
+      0
+    );
+    let tiffinTotal = cart.tiffins.reduce(
+      (acc, tiffin) => acc + parseFloat(tiffin.totalAmount || 0),
+      0
+    );
+    cart.totalAmount = productTotal + tiffinTotal;
+
+    await cart.save();
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, null, "Coupon removed successfully"));
+  } catch (error) {
+    console.error("Error removing coupon:", error);
+    return res.status(500).json(new ApiError(500, "Internal Server Error"));
+  }
+};
+
+const ValidateTiffinCoupon = async (req, res) => {
+  try {
+    const { code, orderTotal, date, userId } = req.body;
+
+    if (!code || !orderTotal || !userId) {
+      return res
+        .status(400)
+        .json(
+          new ApiError(400, "Coupon code, order total, and userId are required")
+        );
+    }
+
+    const orderAmount = parseFloat(orderTotal);
+    if (isNaN(orderAmount) || orderAmount <= 0) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "Order total must be a positive number"));
+    }
+
+    let validationDate = new Date();
+    if (date) {
+      const datePattern = /^(\d{2})-(\d{2})-(\d{4})$/;
+      if (!datePattern.test(date)) {
+        return res
+          .status(400)
+          .json(new ApiError(400, "Invalid date format. Use DD-MM-YYYY"));
+      }
+      const [day, month, year] = date.split("-").map(Number);
+      validationDate = new Date(year, month - 1, day);
+      if (isNaN(validationDate.getTime())) {
+        return res.status(400).json(new ApiError(400, "Invalid date value"));
+      }
+    }
+
+    const trimmedCode = code.trim().toUpperCase();
+
+    const coupon = await CouponModel.findOne({
+      code: trimmedCode,
+      isActive: true,
+      isTiffin: true,
+      $or: [
+        { startAt: { $exists: false } },
+        { startAt: { $lte: validationDate } },
+      ],
+      $or: [
+        { expiresAt: { $exists: false } },
+        { expiresAt: { $gte: validationDate } },
+      ],
+    });
+
+    if (!coupon) {
+      return res
+        .status(404)
+        .json(
+          new ApiError(
+            404,
+            "Tiffin coupon not found, inactive, expired, or usage limit reached"
+          )
+        );
+    }
+
+    if (!coupon.isMultiple && coupon.usedBy.includes(userId)) {
+      return res
+        .status(400)
+        .json(new ApiError(400, "You have already used this tiffin coupon"));
+    }
+
+    if (coupon.minOrderAmount && orderAmount < coupon.minOrderAmount) {
+      return res
+        .status(400)
+        .json(
+          new ApiError(
+            400,
+            `Order total must be at least ${coupon.minOrderAmount}`
+          )
+        );
+    }
+
+    let discount = 0;
+    if (coupon.discountType === "percentage") {
+      discount = (coupon.discountValue / 100) * orderAmount;
+    } else if (coupon.discountType === "fixed") {
+      discount = coupon.discountValue;
+    }
+
+    discount = Math.min(discount, orderAmount);
+    discount = Math.round(discount * 100) / 100;
+
+    const updateOps = {
+      $addToSet: { usedBy: userId },
+    };
+    if (coupon.usageLimit && coupon.usageLimit > 0) {
+      updateOps.$inc = { usedCount: 1 };
+    }
+
+    await CouponModel.updateOne({ _id: coupon._id }, updateOps);
+
+    const cart = await CartModel.findOne({ user: userId });
+    if (cart) {
+      cart.discount = discount;
+      cart.discountType = coupon.discountType;
+      cart.couponCode = coupon.code;
+      cart.discountValue = coupon.discountValue;
+      await cart.save();
+    }
+
+    let formattedExpiresAt = null;
+    if (coupon.expiresAt) {
+      formattedExpiresAt = new Date(coupon.expiresAt).toLocaleDateString(
+        "en-GB"
+      );
+    }
+
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          valid: true,
+          code: coupon.code,
+          discount,
+          discountType: coupon.discountType,
+          discountValue: coupon.discountValue,
+          minOrderAmount: coupon.minOrderAmount || 0,
+          expiresAt: formattedExpiresAt,
+          usageLimit: coupon.usageLimit || null,
+          usedCount:
+            coupon.usageLimit && coupon.usageLimit > 0
+              ? coupon.usedCount + 1
+              : null,
+        },
+        "Tiffin coupon validated successfully"
+      )
+    );
+  } catch (error) {
+    console.error("Tiffin coupon validation error:", error);
+    return res.status(500).json(new ApiError(500, "Internal Server Error"));
+  }
+};
+
 module.exports = {
   getAllCoupons,
   CreateCoupons,
   EditCoupons,
   ValidateCoupon,
   DeleteCoupons,
+  RemoveCoupon,
+  ValidateTiffinCoupon,
 };

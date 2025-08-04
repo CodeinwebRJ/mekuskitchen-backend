@@ -1,9 +1,10 @@
 const nodemailer = require("nodemailer");
+const ApiError = require("./ApiError");
 
 const sendMail = async (to, subject, htmlContent) => {
   try {
     const transporter = nodemailer.createTransport({
-      service: "Gmail", 
+      service: "Gmail",
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
@@ -21,7 +22,7 @@ const sendMail = async (to, subject, htmlContent) => {
     return true;
   } catch (error) {
     console.error("Email send error:", error);
-    throw new Error("Failed to send email");
+    throw new ApiError(400, "Failed to send email");
   }
 };
 

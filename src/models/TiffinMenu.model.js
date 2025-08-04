@@ -2,17 +2,11 @@ const mongoose = require("mongoose");
 
 const TiffinMenuSchema = new mongoose.Schema(
   {
+    name: {
+      type: String,
+    },
     day: {
       type: String,
-      enum: [
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday",
-        "Saturday",
-        "Sunday",
-      ],
       required: true,
     },
     items: [
@@ -26,7 +20,7 @@ const TiffinMenuSchema = new mongoose.Schema(
         quantity: {
           type: Number,
         },
-        quantityUnit: {
+        weightUnit: {
           type: String,
         },
         weight: {
@@ -40,8 +34,14 @@ const TiffinMenuSchema = new mongoose.Schema(
     date: {
       type: String,
     },
+    endDate: {
+      type: String,
+    },
     subTotal: {
       type: String,
+    },
+    isCustomized: {
+      type: Boolean,
     },
     image_url: [
       {
@@ -63,18 +63,21 @@ const TiffinMenuSchema = new mongoose.Schema(
     category: {
       type: String,
     },
+    averageRating: {
+      type: Number,
+      default: 0,
+    },
+    aboutItem: [
+      {
+        type: String,
+      },
+    ],
     Active: {
       type: Boolean,
     },
   },
   {
     timestamps: true,
-    toObject: {
-      transform: (doc, ret) => {
-        delete ret.Active;
-        return ret;
-      },
-    },
   }
 );
 

@@ -25,7 +25,9 @@ const CreateShipment = async (req, res) => {
     const convertToKgs = (weight, unit) => {
       const w = parseFloat(weight);
       if (isNaN(w)) {
-        throw new Error(`Invalid weight value: ${weight}`);
+        return res
+          .status(400)
+          .json(new ApiError(`Invalid weight value: ${weight}`));
       }
       switch ((unit || "kgs").toLowerCase()) {
         case "g":
@@ -48,7 +50,11 @@ const CreateShipment = async (req, res) => {
     const flattenedPackages = packages.flatMap((pkg) => {
       const quantity = parseInt(pkg.quantity, 10) || 1;
       if (isNaN(quantity) || quantity < 1) {
-        throw new Error(`Invalid quantity for package: ${JSON.stringify(pkg)}`);
+        return res
+          .status(400)
+          .json(
+            new ApiError(`Invalid quantity for package: ${JSON.stringify(pkg)}`)
+          );
       }
       const convertedWeight = convertToKgs(pkg.weight, pkg.unit);
       return Array.from({ length: quantity }).map(() => ({
@@ -127,8 +133,6 @@ const CreateShipment = async (req, res) => {
         new ApiResponse(200, response.data, "Shipment created successfully")
       );
   } catch (error) {
-    console.dir(error.response?.data || error, { depth: null });
-    // console.log(error)
     return res.status(500).json(new ApiError(500, "Internal Server Error"));
   }
 };
@@ -168,95 +172,11 @@ const CancelShipping = async (req, res) => {
       .json(new ApiResponse(200, shipment, "Shipment canceled successfully"));
   } catch (error) {
     console.error(error.response?.data || error.message);
-    res.status(500).json({
-      error: "Failed to cancel shipment",
-      details: error.response?.data || error.message,
-    });
+    res.status(500).json(new ApiError(500, "Failed to cancel shipment"));
   }
 };
 
-const CalculateRate = async (req, res) => {
-  try {
-    const token = await getUPSToken();
-    const { shipper, recipient, packageDetails, serviceCode = "03" } = req.body;
-
-    const ratePayload = {
-      RateRequest: {
-        Request: {
-          RequestOption: "Rate",
-        },
-        Shipment: {
-          Shipper: {
-            Address: {
-              AddressLine: shipper.addressLine,
-              City: shipper.city,
-              StateProvinceCode: shipper.stateProvinceCode,
-              PostalCode: shipper.postalCode,
-              CountryCode: shipper.countryCode,
-            },
-          },
-          ShipTo: {
-            Address: {
-              AddressLine: recipient.addressLine,
-              City: recipient.city,
-              StateProvinceCode: recipient.stateProvinceCode,
-              PostalCode: recipient.postalCode,
-              CountryCode: recipient.countryCode,
-            },
-          },
-          Service: {
-            Code: serviceCode,
-          },
-          Package: [
-            {
-              PackagingType: {
-                Code: packageDetails.packagingType || "02",
-              },
-              Dimensions: {
-                UnitOfMeasurement: {
-                  Code: packageDetails.dimensions.unit || "IN",
-                },
-                Length: packageDetails.dimensions.length,
-                Width: packageDetails.dimensions.width,
-                Height: packageDetails.dimensions.height,
-              },
-              PackageWeight: {
-                UnitOfMeasurement: {
-                  Code: packageDetails.weight.unit || "LBS",
-                },
-                Weight: packageDetails.weight.value,
-              },
-            },
-          ],
-        },
-      },
-    };
-
-    const response = await axios.post(
-      `${BASE_URL}/rating/v1/shops`,
-      ratePayload,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-          transId: `rate_${Date.now()}`,
-          transactionSrc: "mekus",
-        },
-      }
-    );
-
-    res
-      .status(200)
-      .json(
-        new ApiResponse(200, response.data, "Rates retrieved successfully")
-      );
-  } catch (error) {
-    console.error(error.response?.data || error.message);
-    res.status(500).json(new ApiError(500, "Internal Server Error"));
-  }
-};
-
-const Tacking = async (req, res) => {
+const Tracking = async (req, res) => {
   try {
     const { trackingNumber } = req.params;
 
@@ -306,17 +226,90 @@ const Tacking = async (req, res) => {
 
 const TimeInTransit = async (req, res) => {
   try {
-    const {} = req.body;
+    const token = await getUPSToken();
+    const { shipFrom, shipTo, pickupDate, weight } = req.body;
+
+    if (!shipFrom || !shipTo || !pickupDate) {
+      return res
+        .status(400)
+        .json(
+          new ApiError(
+            400,
+            "Missing required fields: shipFrom, shipTo, and pickupDate are required"
+          )
+        );
+    }
+
+    const requestPayload = {
+      TimeInTransitRequest: {
+        Request: {
+          RequestOption: "TNT",
+        },
+        ShipFrom: {
+          Address: {
+            City: shipFrom.city,
+            StateProvinceCode: shipFrom.state,
+            PostalCode: shipFrom.postalCode,
+            CountryCode: shipFrom.countryCode,
+          },
+        },
+        ShipTo: {
+          Address: {
+            City: shipTo.city,
+            StateProvinceCode: shipTo.state,
+            PostalCode: shipTo.postalCode,
+            CountryCode: shipTo.countryCode,
+          },
+        },
+        ShipmentWeight: {
+          UnitOfMeasurement: {
+            Code: "KGS",
+          },
+          Weight: weight.toString(),
+        },
+        PickupDate: pickupDate.replace(/-/g, ""),
+      },
+    };
+
+    const response = await axios.post(
+      `${BASE_URL}/rest/TimeInTransit`,
+      requestPayload,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          transId: `timeInTransit_${Date.now()}`,
+          transactionSrc: "mekus",
+        },
+      }
+    );
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          response.data,
+          "Time-in-transit data fetched successfully"
+        )
+      );
   } catch (error) {
-    console.log(error);
-    return res.status(500).json(new ApiError(500, "Internal Server Error"));
+    console.error(error.response?.data || error.message);
+    return res
+      .status(500)
+      .json(
+        new ApiError(
+          500,
+          "Failed to retrieve time-in-transit info",
+          error.response?.data || error.message
+        )
+      );
   }
 };
 
 module.exports = {
   CreateShipment,
   CancelShipping,
-  CalculateRate,
-  Tacking,
+  Tracking,
   TimeInTransit,
 };

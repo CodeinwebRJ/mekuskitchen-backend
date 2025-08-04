@@ -2,7 +2,9 @@ const mongoose = require("mongoose");
 
 const OrderSchema = new mongoose.Schema({
   orderId: {
-    type: Number,
+    type: String,
+    required: true,
+    unique: true,
   },
   userId: {
     type: String,
@@ -12,10 +14,16 @@ const OrderSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  trackingNumber: {
+    type: String,
+  },
   addressId: {
     type: String,
   },
   paymentMethod: {
+    type: String,
+  },
+  paymentId: {
     type: String,
   },
   paymentStatus: {
@@ -24,11 +32,7 @@ const OrderSchema = new mongoose.Schema({
   },
   orderStatus: {
     type: String,
-    enum: [
-      "Pending",
-      "Delivered",
-      "Cancelled",
-    ],
+    enum: ["Pending", "Delivered", "Cancelled"],
   },
   deliveryTime: {
     type: Date,
@@ -55,6 +59,9 @@ const OrderSchema = new mongoose.Schema({
     type: String,
   },
   cartItems: {
+    type: Array,
+  },
+  tiffinItems: {
     type: Array,
   },
   selfPickup: {

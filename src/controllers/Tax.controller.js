@@ -4,8 +4,8 @@ const ApiResponse = require("../utils/ApiResponse");
 
 const getTaxRate = async (req, res) => {
   try {
-    const { provinceCode, category } = req.query;
-    if (!provinceCode && !category) {
+    const { search, category } = req.query;
+    if (!search && !category) {
       const allConfigs = await TaxModel.find({});
       return res
         .status(200)
@@ -13,51 +13,37 @@ const getTaxRate = async (req, res) => {
           new ApiResponse(200, allConfigs, "All tax configurations retrieved")
         );
     }
-    if (provinceCode && !category) {
-      const config = await TaxModel.findOne({ provinceCode });
 
-      if (!config) {
-        return res
-          .status(404)
-          .json(
-            new ApiError(
-              404,
-              `No tax configuration found for province code: ${provinceCode}`
-            )
-          );
-      }
-
-      return res
-        .status(200)
-        .json(
-          new ApiResponse(
-            200,
-            config,
-            `Tax configuration retrieved for province: ${provinceCode}`
-          )
-        );
-    }
-    if (!provinceCode && category) {
+    if (!search && category) {
       return res
         .status(400)
         .json(
           new ApiError(
             400,
-            "provinceCode is required when querying by category"
+            "Search field (province code or name) is required when querying by category"
           )
         );
     }
-    const config = await TaxModel.findOne({ provinceCode });
+
+    const normalizedSearch = search.trim().toLowerCase();
+
+    const config = await TaxModel.findOne({
+      $or: [
+        { provinceCode: normalizedSearch.toUpperCase() },
+        { provinceName: new RegExp(`^${normalizedSearch}$`, "i") },
+      ],
+    });
 
     if (!config) {
       return res
-        .status(404)
-        .json(
-          new ApiError(
-            404,
-            `No tax configuration found for province code: ${provinceCode}`
-          )
-        );
+        .status(200)
+        .json(new ApiResponse(200, [], "No tax configuration found"));
+    }
+
+    if (!category) {
+      return res
+        .status(200)
+        .json(new ApiResponse(200, config, "Tax configuration retrieved"));
     }
 
     const categories = Array.isArray(category) ? category : [category];
@@ -81,7 +67,8 @@ const getTaxRate = async (req, res) => {
       new ApiResponse(
         200,
         {
-          provinceCode,
+          provinceCode: config.provinceCode,
+          provinceName: config.provinceName,
           results,
         },
         "Tax rates processed"

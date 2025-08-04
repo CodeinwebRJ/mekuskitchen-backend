@@ -127,7 +127,6 @@ const getAllSubscriptionStatuses = async (req, res) => {
           response.data.data[0]?.lastTransactions[0]?.signedRenewalInfo;
         const decodedData = DecodeJWT(data);
 
-        console.log(decodedData);
         res.json(
           new ApiResponse(
             200,

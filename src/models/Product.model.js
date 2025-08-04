@@ -60,6 +60,9 @@ const ProductSchema = mongoose.Schema(
       trim: true,
       default: null,
     },
+    manageInvantory: {
+      type: Boolean,
+    },
     subCategory: {
       type: String,
       trim: true,
@@ -68,9 +71,9 @@ const ProductSchema = mongoose.Schema(
       type: String,
       trim: true,
     },
-    isTaxFree:{
+    isTaxFree: {
       type: Boolean,
-      default: false
+      default: false,
     },
     brand: {
       type: String,
@@ -95,6 +98,9 @@ const ProductSchema = mongoose.Schema(
     averageRating: {
       type: Number,
       default: 0,
+    },
+    discount: {
+      type: Number,
     },
     weightUnit: {
       type: String,
