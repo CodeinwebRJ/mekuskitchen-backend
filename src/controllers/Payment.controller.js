@@ -75,7 +75,7 @@ const CreatePayment = async (req, res) => {
       amount,
       cleanedCardNumber,
       expdate,
-      // cvv
+      cvv
     );
 
     const monerisResponse = await axios.post(MONERIS_API_URL, xmlPayload, {
@@ -102,7 +102,11 @@ const CreatePayment = async (req, res) => {
       message: receipt.Message,
       rawResponse: receipt,
     });
-
+    if (paymentRes.status === "failed") {
+      return res.status(400).json(
+        new ApiError(400, "Payment failed: " + receipt.Message)
+      );
+    }
     return res
       .status(200)
       .json(new ApiResponse(200, paymentRes, "Payment processed"));
