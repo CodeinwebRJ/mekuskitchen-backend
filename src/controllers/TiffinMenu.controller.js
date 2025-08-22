@@ -23,19 +23,90 @@ const tryParseJson = (input, fieldName) => {
   }
 };
 
+// const getAllTiffinMenu = async (req, res) => {
+//   try {
+//     const { Active, day, search } = req.body;
+//     const filter = {};
+
+//     if (Active !== undefined) {
+//       filter.Active = Active;
+//     }
+
+//     if (day?.trim()) {
+//       filter.day = day.trim();
+//     }
+
+//     if (search?.trim()) {
+//       const regex = new RegExp(search.trim(), "i");
+//       filter.$or = [
+//         { name: regex },
+//         { day: regex },
+//         { description: regex },
+//         { "items.name": regex },
+//       ];
+//     }
+
+//     let tiffins = await TiffinMenuModel.find(filter).sort({ createdAt: -1 });
+
+//     tiffins = tiffins.sort(
+//       (a, b) => validDays.indexOf(a.day) - validDays.indexOf(b.day)
+//     );
+
+//     const tiffinIds = tiffins.map((t) => t._id);
+//     const ratings = await ReviewModel.aggregate([
+//       {
+//         $match: {
+//           tiffinId: { $in: tiffinIds },
+//           isTiffinReview: true,
+//         },
+//       },
+//       {
+//         $group: {
+//           _id: "$tiffinId",
+//           averageRating: { $avg: "$rating" },
+//           totalReviews: { $sum: 1 },
+//         },
+//       },
+//     ]);
+
+//     const ratingMap = Object.fromEntries(
+//       ratings.map((r) => [r._id.toString(), r])
+//     );
+
+//     const tiffinsWithRating = tiffins.map((tiffin) => {
+//       const { averageRating = 0, totalReviews = 0 } =
+//         ratingMap[tiffin._id.toString()] || {};
+//       return {
+//         ...tiffin.toObject(),
+//         averageRating: Number(averageRating.toFixed(1)),
+//         totalReviews,
+//       };
+//     });
+
+//     return res
+//       .status(200)
+//       .json(
+//         new ApiResponse(
+//           200,
+//           tiffinsWithRating,
+//           "Tiffin menus fetched successfully"
+//         )
+//       );
+//   } catch (error) {
+//     console.error("Error fetching tiffin menus:", error);
+//     return res
+//       .status(500)
+//       .json(new ApiError(500, "Failed to fetch tiffin menus", error.message));
+//   }
+// };
+
 const getAllTiffinMenu = async (req, res) => {
   try {
     const { Active, day, search } = req.body;
     const filter = {};
 
-    if (Active !== undefined) {
-      filter.Active = Active;
-    }
-
-    if (day?.trim()) {
-      filter.day = day.trim();
-    }
-
+    if (Active !== undefined) filter.Active = Active;
+    if (day?.trim()) filter.day = day.trim();
     if (search?.trim()) {
       const regex = new RegExp(search.trim(), "i");
       filter.$or = [
@@ -48,18 +119,27 @@ const getAllTiffinMenu = async (req, res) => {
 
     let tiffins = await TiffinMenuModel.find(filter).sort({ createdAt: -1 });
 
+    // 🔹 Auto update expired tiffins before sending response
+    const now = new Date();
+    now.setHours(0, 0, 0, 0); 
+    const updates = [];
+    tiffins.forEach((tiffin) => {
+      if (tiffin.date && new Date(tiffin.date) < now && tiffin.Active) {
+        tiffin.Active = false;
+        updates.push(tiffin.save());
+      }
+    });
+    if (updates.length) await Promise.all(updates);
+
+    // sort by weekday
     tiffins = tiffins.sort(
       (a, b) => validDays.indexOf(a.day) - validDays.indexOf(b.day)
     );
 
+    // add ratings
     const tiffinIds = tiffins.map((t) => t._id);
     const ratings = await ReviewModel.aggregate([
-      {
-        $match: {
-          tiffinId: { $in: tiffinIds },
-          isTiffinReview: true,
-        },
-      },
+      { $match: { tiffinId: { $in: tiffinIds }, isTiffinReview: true } },
       {
         $group: {
           _id: "$tiffinId",
@@ -99,6 +179,7 @@ const getAllTiffinMenu = async (req, res) => {
       .json(new ApiError(500, "Failed to fetch tiffin menus", error.message));
   }
 };
+
 
 const createTiffinMenu = async (req, res) => {
   try {

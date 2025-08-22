@@ -81,4 +81,19 @@ const TiffinMenuSchema = new mongoose.Schema(
   }
 );
 
+// Auto deactivate when saving
+TiffinMenuSchema.pre("save", function (next) {
+  if (this.date) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tiffinDate = new Date(this.date);
+    tiffinDate.setHours(0, 0, 0, 0);
+
+    if (tiffinDate < today) {
+      this.Active = false;
+    }
+  }
+  next();
+});
+
 module.exports = mongoose.model("TiffinMenu", TiffinMenuSchema);
