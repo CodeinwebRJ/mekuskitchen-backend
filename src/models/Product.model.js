@@ -58,7 +58,7 @@ const ProductSchema = mongoose.Schema(
     category: {
       type: String,
       trim: true,
-      default: null,
+      default: "",
     },
     manageInvantory: {
       type: Boolean,
@@ -78,7 +78,7 @@ const ProductSchema = mongoose.Schema(
     brand: {
       type: String,
       trim: true,
-      default: null,
+      default: "",
     },
     features: [
       {
@@ -93,7 +93,7 @@ const ProductSchema = mongoose.Schema(
     },
     weight: {
       type: Number,
-      default: null,
+      default: "",
     },
     averageRating: {
       type: Number,
@@ -104,19 +104,19 @@ const ProductSchema = mongoose.Schema(
     },
     weightUnit: {
       type: String,
-      default: null,
+      default: "",
     },
     dimensions: {
       length: {
-        type: Number,
+        type: String,
         min: 0,
       },
       width: {
-        type: Number,
+        type: String,
         min: 0,
       },
       height: {
-        type: Number,
+        type: String,
         min: 0,
       },
       dimensionUnit: {
