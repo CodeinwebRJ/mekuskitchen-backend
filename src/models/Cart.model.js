@@ -80,12 +80,12 @@ const CartSchema = new mongoose.Schema(
     },
     discountType: {
       type: String,
-      enum: ["percentage", "fixed", null],
-      default: null,
+      enum: ["percentage", "fixed",""],
+      default:"",
     },
     couponCode: {
       type: String,
-      default: null,
+      default: "",
     },
   },
   {

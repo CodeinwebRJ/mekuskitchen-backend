@@ -19,6 +19,7 @@ const AdminUserRoute = require("./routes/AdminUser.route");
 const ShippingRoute = require("./routes/Shipping.route");
 const CategoriesRoute = require("./routes/Categories.route");
 const SubscriptionStatusesRoute = require("./routes/et-world-SubscriptionStatuses.route");
+const replaceNull = require("./middlewares/replaceNull");
 require("dotenv").config();
 
 const app = express();
@@ -34,9 +35,18 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
 
+app.use(replaceNull);
+
+
 app.get("/", (req, res) => {
   res.send("Hello World!");
 });
+
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).send("Something broke!");
+});
+
 
 app.use("/api/v1/product", ProductRoute);
 app.use("/api/v1/review", ReviewRoute);
