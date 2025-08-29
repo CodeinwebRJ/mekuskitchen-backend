@@ -40,7 +40,7 @@ const getPincodeList = async (req, res) => {
 
     const pincodes = await PincodeModel.find({
       ...(pincodeSearch && { code: { $regex: regex } }),
-    }).sort({ createdAt: -1 }); // newest first
+    }).sort({ createdAt: -1 }); 
 
     return res
       .status(200)
@@ -96,7 +96,7 @@ const UpdatePincode = async (req, res) => {
 // Delete Pincode
 const DeletePincode = async (req, res) => {
   try {
-    const { pincodeId } = req.body; // or req.params if using RESTful
+    const { pincodeId } = req.body; 
 
     if (!pincodeId) {
       return res.status(400).json(new ApiError(400, "Pincode ID is required"));
@@ -118,9 +118,37 @@ const DeletePincode = async (req, res) => {
   }
 };
 
+// Check Pincode Validity
+const CheckPincode = async (req, res) => {
+  try {
+    const { code } = req.params;
+
+    if (!code) {
+      return res.status(400).json(new ApiError(400, "Pincode is required"));
+    }
+
+    const pincode = await PincodeModel.findOne({ code: code.trim(), isActive: true });
+
+    if (!pincode) {
+      return res
+        .status(404)
+        .json(new ApiError(404, "Delivery not available in this postal code"));
+    }
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, pincode, "Delivery available for this postal code"));
+  } catch (error) {
+    console.error("Error checking pincode:", error);
+    return res.status(500).json(new ApiError(500, "Internal Server Error"));
+  }
+};
+
+
 module.exports = {
   CreatePincode,
   getPincodeList,
   UpdatePincode,
   DeletePincode,
+  CheckPincode,
 };
